@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import java.util.Optional;
+import java.time.LocalDate;
 import com.example.project.aloy.repository.PaymentRepository;
 import com.example.project.aloy.repository.ApartmentRepository;
 import com.example.project.aloy.model.Payment;
@@ -65,7 +66,7 @@ public class PaymentService {
 
     /**
      * Allows a tenant to vacate an apartment by setting a vacate date
-     * Automatically marks the apartment as AVAILABLE
+     * Automatically marks the apartment as AVAILABLE and updates availability date
      */
     @Transactional
     public void vacateApartment(Long tenantId, Long apartmentId, String vacateDate) {
@@ -86,14 +87,25 @@ public class PaymentService {
         paymentRepository.save(payment);
         System.out.println("[DEBUG Service] Payment record updated with vacate date");
         
-        // Mark apartment as available
+        // Mark apartment as available and update availability date
         Optional<Apartment> apartmentOpt = apartmentRepository.findByIdForUpdate(apartmentId);
         if (apartmentOpt.isPresent()) {
             Apartment apartment = apartmentOpt.get();
             apartment.setBooked(false);
             apartment.setStatus("AVAILABLE");
+            
+            // Update the availability date to the vacate date
+            try {
+                LocalDate availabilityDate = LocalDate.parse(vacateDate);
+                apartment.setAvailability(availabilityDate);
+                System.out.println("[DEBUG Service] Apartment availability date updated to: " + vacateDate);
+            } catch (Exception e) {
+                System.out.println("[WARNING Service] Failed to parse vacate date, using current date");
+                apartment.setAvailability(LocalDate.now());
+            }
+            
             apartmentRepository.save(apartment);
-            System.out.println("[SUCCESS Service] Apartment " + apartmentId + " marked as AVAILABLE");
+            System.out.println("[SUCCESS Service] Apartment " + apartmentId + " marked as AVAILABLE from " + vacateDate);
         }
     }
 }
