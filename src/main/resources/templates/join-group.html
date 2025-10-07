@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Group - Apartment Rental</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">🏠 Apartment Rental</a>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0">Join Roommate Group</h4>
+                    </div>
+                    <div class="card-body">
+                        <div id="groupInfo">
+                            <div class="text-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-3">Loading group information...</p>
+                            </div>
+                        </div>
+                        <div id="message" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Get invite code from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const inviteCode = urlParams.get('code');
+
+        if (!inviteCode) {
+            document.getElementById('groupInfo').innerHTML = 
+                '<div class="alert alert-danger">Invalid invite link. No invite code provided.</div>';
+        } else {
+            // Fetch group details
+            fetch('/api/groups/code/' + inviteCode)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('groupInfo').innerHTML = 
+                            '<div class="alert alert-danger">' + data.error + '</div>';
+                        return;
+                    }
+
+                    const group = data.group;
+                    const apartment = data.apartment;
+                    const members = data.members || [];
+                    const memberCount = data.memberCount || members.length;
+                    const isFull = data.isFull || memberCount >= 4;
+
+                    let html = '<div class="mb-4">' +
+                        '<h5>Apartment Details</h5>' +
+                        '<ul class="list-group">' +
+                            '<li class="list-group-item"><strong>Location:</strong> ' + apartment.district + '</li>' +
+                            '<li class="list-group-item"><strong>Address:</strong> ' + apartment.address + '</li>' +
+                            '<li class="list-group-item"><strong>Monthly Rent:</strong> $' + apartment.monthlyRate + '</li>' +
+                            '<li class="list-group-item"><strong>Description:</strong> ' + apartment.description + '</li>' +
+                        '</ul>' +
+                    '</div>';
+
+                    html += '<div class="mb-4">' +
+                        '<h5>Group Information</h5>' +
+                        '<p><strong>Invite Code:</strong> <code>' + inviteCode + '</code></p>' +
+                        '<p><strong>Current Members:</strong> ' + memberCount + '/4</p>' +
+                        '<ul class="list-group">';
+                    
+                    members.forEach(member => {
+                        html += '<li class="list-group-item">👤 ' + member.name + '</li>';
+                    });
+                    
+                    html += '</ul></div>';
+
+                    if (isFull) {
+                        html += '<div class="alert alert-warning">This group is already full (4/4 members).</div>';
+                    } else if (group.status === 'BOOKED') {
+                        html += '<div class="alert alert-info">This group has already booked the apartment.</div>';
+                    } else if (group.status === 'CANCELLED') {
+                        html += '<div class="alert alert-danger">This group has been cancelled.</div>';
+                    } else {
+                        // Check if user is logged in
+                        const user = JSON.parse(localStorage.getItem('user') || 'null');
+                        
+                        if (!user) {
+                            html += '<div class="alert alert-warning">Please <a href="/login" class="alert-link">log in</a> to join this group.</div>';
+                        } else {
+                            html += '<button class="btn btn-success btn-lg w-100" onclick="joinGroup()">Join This Group</button>';
+                        }
+                    }
+
+                    document.getElementById('groupInfo').innerHTML = html;
+                })
+                .catch(error => {
+                    document.getElementById('groupInfo').innerHTML = 
+                        '<div class="alert alert-danger">Error loading group information: ' + error.message + '</div>';
+                });
+        }
+
+        // Join group function
+        function joinGroup() {
+            const user = JSON.parse(localStorage.getItem('user'));
+            
+            if (!user) {
+                alert('Please log in first');
+                window.location.href = '/login';
+                return;
+            }
+
+            fetch('/api/groups/join', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    inviteCode: inviteCode, 
+                    tenantId: user.userId 
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('message').innerHTML = 
+                        '<div class="alert alert-success">' +
+                            '<h5>✓ Successfully Joined Group!</h5>' +
+                            '<p>' + data.message + '</p>' +
+                            '<a href="/" class="btn btn-primary">Go to Home Page</a>' +
+                        '</div>';
+                    
+                    // Hide join button
+                    const joinBtn = document.querySelector('button');
+                    if (joinBtn) joinBtn.style.display = 'none';
+                } else {
+                    document.getElementById('message').innerHTML = 
+                        '<div class="alert alert-danger">' + data.message + '</div>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('message').innerHTML = 
+                    '<div class="alert alert-danger">Error: ' + error.message + '</div>';
+            });
+        }
+    </script>
+</body>
+</html>

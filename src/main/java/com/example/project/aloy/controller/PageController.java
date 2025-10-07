@@ -25,4 +25,9 @@ public class PageController {
     public String apartmentDetails() {
         return "apartment-details";
     }
+
+    @GetMapping("/join-group")
+    public String joinGroup() {
+        return "join-group";
+    }
 }

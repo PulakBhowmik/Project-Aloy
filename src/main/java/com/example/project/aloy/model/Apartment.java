@@ -24,7 +24,7 @@ public class Apartment {
     @Column(name = "monthly_rent")
     private BigDecimal monthlyRate;
 
-    // 'solo' or 'group'
+    // 'solo', 'group', or 'both'
     private String allowedFor;
 
     // AVAILABLE or RENTED
@@ -119,6 +119,10 @@ public class Apartment {
     }
 
     public void setAllowedFor(String allowedFor) {
+        // Validate that only 'solo', 'group', or 'both' are allowed
+        if (allowedFor != null && !allowedFor.isEmpty()) {
+            AllowedForType.fromString(allowedFor); // Will throw exception if invalid
+        }
         this.allowedFor = allowedFor;
     }
 

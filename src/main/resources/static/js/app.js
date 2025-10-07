@@ -452,57 +452,305 @@ window.showPaymentModal = function(apartmentId, amount) {
 
 // Group modal logic
 window.showGroupModal = function(apartmentId, amount) {
-    var user = JSON.parse(localStorage.getItem('user'));
-    fetch('/api/roommate-groups/by-apartment/' + apartmentId)
-        .then(function(res) { return res.json(); })
-        .then(function(groups) {
-            var group = groups.find(function(g) {
-                return g.members.some(function(m) { return m.tenant.userId === user.userId; });
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) {
+        alert('Please log in to book in a group');
+        return;
+    }
+
+    // Fetch groups for this apartment
+    fetch('/api/groups/apartment/' + apartmentId)
+        .then(res => res.json())
+        .then(data => {
+            const formingGroups = data.formingGroups || [];
+            const readyGroups = data.readyGroups || [];
+            
+            // Check if user is in any of these groups
+            let userGroup = null;
+            [...formingGroups, ...readyGroups].forEach(group => {
+                if (group.members && group.members.some(m => m.tenant.userId === user.userId)) {
+                    userGroup = group;
+                }
             });
-            var html = '<div class="modal fade" id="groupModal" tabindex="-1" aria-labelledby="groupModalLabel" aria-hidden="true">' +
-                '<div class="modal-dialog">' +
+            
+            let html = '<div class="modal fade" id="groupModal" tabindex="-1" aria-hidden="true">' +
+                '<div class="modal-dialog modal-lg">' +
                     '<div class="modal-content">' +
                         '<div class="modal-header">' +
-                            '<h5 class="modal-title" id="groupModalLabel">Roommate Group</h5>' +
-                            '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>' +
+                            '<h5 class="modal-title">Book in a Group (4 People Required)</h5>' +
+                            '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
                         '</div>' +
                         '<div class="modal-body">' +
-                            '<div id="groupMembersList">';
-            if (group) {
-                html += '<h6>Group Members:</h6><ul>';
-                group.members.forEach(function(m) {
-                    html += '<li>' + m.tenant.name + ' (' + m.tenant.userId + ')</li>';
-                });
-                html += '</ul>';
-                if (group.members.length < 4) {
-                    html += '<p>Waiting for more members to join...</p>';
-                } else {
-                    html += '<button class="btn btn-primary" id="groupPayBtn">Book/Make Payment</button>';
-                }
-                html += '<button class="btn btn-danger mt-2" id="leaveGroupBtn">Leave Group</button>';
-            } else {
-                html += '<p>You are not in a group for this apartment. <button class="btn btn-success" id="joinGroupBtn">Join Group</button></p>';
+                            '<div id="groupContent">';
+            
+            // If user is already in a group for this apartment, show their group
+            if (userGroup) {
+                html += '<div class="alert alert-info">You are already in a group for this apartment!</div>';
+                html += '</div><div id="groupMsg" class="mt-3"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+            
+                document.getElementById('groupModalContainer').innerHTML = html;
+                const modal = new bootstrap.Modal(document.getElementById('groupModal'));
+                modal.show();
+                
+                // Show the user's group details immediately
+                viewMyGroup(userGroup.groupId);
+                return;
             }
-            html += '</div><div id="groupMsg" class="mt-2"></div></div></div></div></div>';
+            
+            // Show forming groups
+            if (formingGroups.length > 0) {
+                html += '<h6>Forming Groups (Join One):</h6>';
+                formingGroups.forEach(group => {
+                    // Check if user is member
+                    const isMember = group.members && group.members.some(m => m.tenant.userId === user.userId);
+                    
+                    html += '<div class="card mb-2">' +
+                        '<div class="card-body">' +
+                            '<div class="d-flex justify-content-between align-items-center">' +
+                                '<div>' +
+                                    '<strong>Group ' + group.groupId + '</strong> - ' + group.memberCount + '/4 members<br>' +
+                                    '<small>Invite Code: <code>' + group.inviteCode + '</code></small>' +
+                                '</div>' +
+                                '<div>';
+                    
+                    if (isMember) {
+                        html += '<button class="btn btn-sm btn-primary me-2" onclick="viewMyGroup(' + group.groupId + ')">View Group</button>' +
+                                '<button class="btn btn-sm btn-danger" onclick="leaveGroup(' + group.groupId + ')">Leave</button>';
+                    } else {
+                        html += '<button class="btn btn-sm btn-success" onclick="joinExistingGroup(\'' + group.inviteCode + '\')">Join</button>';
+                    }
+                    
+                    html += '</div></div></div></div>';
+                });
+            }
+            
+            // Show ready groups
+            if (readyGroups.length > 0) {
+                html += '<h6 class="mt-3">Ready Groups (4/4 members - Can Book Now):</h6>';
+                readyGroups.forEach(group => {
+                    const isMember = group.members && group.members.some(m => m.tenant.userId === user.userId);
+                    
+                    html += '<div class="card mb-2 border-success">' +
+                        '<div class="card-body">' +
+                            '<div class="d-flex justify-content-between align-items-center">' +
+                                '<div>' +
+                                    '<strong>Group ' + group.groupId + '</strong> - 4/4 members ✓<br>' +
+                                    '<small class="text-success">Ready to book!</small>' +
+                                '</div>' +
+                                '<div>';
+                    
+                    if (isMember) {
+                        html += '<button class="btn btn-sm btn-primary" onclick="viewMyGroup(' + group.groupId + ')">View & Pay</button>';
+                    } else {
+                        html += '<span class="badge bg-success">Full</span>';
+                    }
+                    
+                    html += '</div></div></div></div>';
+                });
+            }
+            
+            // Create new group button
+            html += '<hr><button class="btn btn-primary" onclick="createNewGroup(' + apartmentId + ')">Create New Group</button>';
+            
+            html += '</div><div id="groupMsg" class="mt-3"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+            
             document.getElementById('groupModalContainer').innerHTML = html;
-            var modal = new bootstrap.Modal(document.getElementById('groupModal'));
+            const modal = new bootstrap.Modal(document.getElementById('groupModal'));
             modal.show();
-            setTimeout(function() {
-                if (document.getElementById('groupPayBtn')) {
-                    document.getElementById('groupPayBtn').onclick = function() {
-                        window.showPaymentModal(apartmentId, amount);
-                    };
-                }
-                if (document.getElementById('leaveGroupBtn')) {
-                    document.getElementById('leaveGroupBtn').onclick = function() {
-                        document.getElementById('groupMsg').innerHTML = '<span class="text-info">Leave group feature coming soon.</span>';
-                    };
-                }
-                if (document.getElementById('joinGroupBtn')) {
-                    document.getElementById('joinGroupBtn').onclick = function() {
-                        document.getElementById('groupMsg').innerHTML = '<span class="text-info">Join group feature coming soon.</span>';
-                    };
-                }
-            }, 100);
+        })
+        .catch(error => {
+            console.error('Error loading groups:', error);
+            alert('Error loading group information');
         });
+};
+
+// Create a new group
+window.createNewGroup = function(apartmentId) {
+    const user = JSON.parse(localStorage.getItem('user'));
+    
+    fetch('/api/groups/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apartmentId: apartmentId, creatorId: user.userId })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            const inviteCode = data.inviteCode;
+            const inviteLink = window.location.origin + '/join-group?code=' + inviteCode;
+            
+            document.getElementById('groupContent').innerHTML = 
+                '<div class="alert alert-success">' +
+                    '<h5>✓ Group Created Successfully!</h5>' +
+                    '<p>You are the first member (1/4). Share this invite code with 3 friends:</p>' +
+                    '<div class="card bg-light p-3 mb-3">' +
+                        '<h3 class="text-center mb-0"><code>' + inviteCode + '</code></h3>' +
+                    '</div>' +
+                    '<p><strong>Share this link:</strong></p>' +
+                    '<input type="text" class="form-control mb-2" value="' + inviteLink + '" id="inviteLinkInput" readonly>' +
+                    '<button class="btn btn-info" onclick="copyInviteLink()">Copy Link</button>' +
+                    '<hr>' +
+                    '<button class="btn btn-primary mt-2" onclick="viewMyGroup(' + data.group.groupId + ')">View My Group</button>' +
+                '</div>';
+        } else {
+            document.getElementById('groupMsg').innerHTML = '<div class="alert alert-danger">' + data.message + '</div>';
+        }
+    })
+    .catch(error => {
+        document.getElementById('groupMsg').innerHTML = '<div class="alert alert-danger">Error: ' + error.message + '</div>';
+    });
+};
+
+// Join an existing group
+window.joinExistingGroup = function(inviteCode) {
+    const user = JSON.parse(localStorage.getItem('user'));
+    
+    if (!user) {
+        alert('Please log in first');
+        return;
+    }
+    
+    fetch('/api/groups/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inviteCode: inviteCode, tenantId: user.userId })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            document.getElementById('groupMsg').innerHTML = 
+                '<div class="alert alert-success"><strong>✓ ' + data.message + '</strong></div>';
+            
+            // Refresh and show group details with updated member count and status
+            setTimeout(() => {
+                viewMyGroup(data.group.groupId);
+            }, 500);
+        } else {
+            document.getElementById('groupMsg').innerHTML = 
+                '<div class="alert alert-danger"><strong>✗ ' + data.message + '</strong></div>';
+        }
+    })
+    .catch(error => {
+        document.getElementById('groupMsg').innerHTML = 
+            '<div class="alert alert-danger">Error: ' + error.message + '</div>';
+    });
+};
+
+// View my group
+window.viewMyGroup = function(groupId) {
+    fetch('/api/groups/' + groupId)
+        .then(res => res.json())
+        .then(group => {
+            const user = JSON.parse(localStorage.getItem('user'));
+            const memberCount = group.members ? group.members.length : 0;
+            const isFull = memberCount >= 4;
+            const isReady = group.status === 'READY';
+            
+            let html = '<div class="card">' +
+                '<div class="card-header bg-primary text-white">' +
+                    '<h5>Your Group - ' + memberCount + '/4 Members</h5>' +
+                '</div>' +
+                '<div class="card-body">' +
+                    '<p><strong>Invite Code:</strong> <code>' + group.inviteCode + '</code></p>' +
+                    '<p><strong>Status:</strong> <span class="badge bg-' + (isReady ? 'success' : 'warning') + '">' + group.status + '</span></p>' +
+                    '<h6>Members:</h6><ul class="list-group mb-3">';
+            
+            if (group.members) {
+                group.members.forEach(member => {
+                    html += '<li class="list-group-item">' + member.tenant.name + 
+                        (member.tenant.userId === group.creatorId ? ' <span class="badge bg-primary">Creator</span>' : '') +
+                        '</li>';
+                });
+            }
+            
+            html += '</ul>';
+            
+            // Show pay button if group is full and ready
+            if (isFull && isReady) {
+                html += '<div class="alert alert-success"><strong>✓ Group is Complete!</strong><br>Any member can now pay to book the apartment.</div>' +
+                    '<button class="btn btn-success btn-lg w-100 mb-3" onclick="bookApartmentForGroup(' + groupId + ', ' + group.apartment.apartmentId + ', ' + group.apartment.monthlyRate + ')">💳 Pay Now & Book Apartment ($' + group.apartment.monthlyRate + ')</button>';
+            } else {
+                html += '<div class="alert alert-info"><strong>⏳ Waiting for more members...</strong><br>Need ' + (4 - memberCount) + ' more member(s) to join before booking.</div>';
+            }
+            
+            html += '<hr><div class="d-flex gap-2">' +
+                '<button class="btn btn-secondary flex-fill" onclick="showGroupModal(' + group.apartment.apartmentId + ')">« Back to Groups</button>' +
+                '<button class="btn btn-danger flex-fill" onclick="leaveGroup(' + groupId + ')">Leave Group</button>' +
+                '</div>';
+            html += '</div></div>';
+            
+            document.getElementById('groupContent').innerHTML = html;
+            document.getElementById('groupMsg').innerHTML = '';
+        })
+        .catch(error => {
+            document.getElementById('groupMsg').innerHTML = 
+                '<div class="alert alert-danger">Error loading group: ' + error.message + '</div>';
+        });
+};
+
+// Leave group
+window.leaveGroup = function(groupId) {
+    if (!confirm('Are you sure you want to leave this group?')) return;
+    
+    const user = JSON.parse(localStorage.getItem('user'));
+    
+    fetch('/api/groups/' + groupId + '/leave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: user.userId })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('groupMsg').innerHTML = 
+                '<div class="alert alert-success">' + data.message + '</div>';
+            setTimeout(() => {
+                bootstrap.Modal.getInstance(document.getElementById('groupModal')).hide();
+            }, 1500);
+        } else {
+            document.getElementById('groupMsg').innerHTML = 
+                '<div class="alert alert-danger">' + data.message + '</div>';
+        }
+    });
+};
+
+// Book apartment for group (payment)
+window.bookApartmentForGroup = function(groupId, apartmentId, amount) {
+    const user = JSON.parse(localStorage.getItem('user'));
+    
+    if (!confirm('Proceed with payment of $' + amount + ' to book this apartment for your group?')) return;
+    
+    fetch('/api/groups/' + groupId + '/book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: user.userId })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert('✓ Apartment booked successfully for your group!');
+            bootstrap.Modal.getInstance(document.getElementById('groupModal')).hide();
+            location.reload(); // Refresh to show updated apartment status
+        } else {
+            document.getElementById('groupMsg').innerHTML = 
+                '<div class="alert alert-danger">' + data.message + '</div>';
+        }
+    });
+};
+
+// Copy invite link
+window.copyInviteLink = function() {
+    const input = document.getElementById('inviteLinkInput');
+    input.select();
+    document.execCommand('copy');
+    alert('Invite link copied to clipboard!');
 };

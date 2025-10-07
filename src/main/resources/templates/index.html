@@ -209,12 +209,20 @@ function showApartmentDetailsModal(apartmentId) {
                     </div>
                 `;
             } else {
-                bookingSection = `
-                    <div class="d-flex gap-2 mt-3">
-                        <button class="btn btn-success" id="bookSoloBtn" data-apartment-id="${apartment.apartmentId}" data-amount="${apartment.monthlyRate}">Book for Myself</button>
-                        <button class="btn btn-info" id="bookGroupBtn" data-apartment-id="${apartment.apartmentId}" data-amount="${apartment.monthlyRate}">Book in a Group</button>
-                    </div>
-                `;
+                const allowedFor = apartment.allowedFor || 'both';
+                let buttons = '';
+                
+                // Show solo button if allowed
+                if (allowedFor === 'solo' || allowedFor === 'both') {
+                    buttons += `<button class="btn btn-success" id="bookSoloBtn" data-apartment-id="${apartment.apartmentId}" data-amount="${apartment.monthlyRate}">Book for Myself</button>`;
+                }
+                
+                // Show group button if allowed
+                if (allowedFor === 'group' || allowedFor === 'both') {
+                    buttons += `<button class="btn btn-info ms-2" id="bookGroupBtn" data-apartment-id="${apartment.apartmentId}" data-amount="${apartment.monthlyRate}">Book in a Group</button>`;
+                }
+                
+                bookingSection = `<div class="d-flex gap-2 mt-3">${buttons}</div>`;
             }
             
             let html = `
@@ -228,7 +236,7 @@ function showApartmentDetailsModal(apartmentId) {
                     <li class="list-group-item"><strong>Location:</strong> ${apartment.address || 'N/A'}</li>
                     <li class="list-group-item"><strong>District:</strong> ${apartment.district || 'N/A'}</li>
                     <li class="list-group-item"><strong>Available from:</strong> ${formatDate(apartment.availability) || 'N/A'}</li>
-                    <li class="list-group-item"><strong>Suitable for:</strong> ${apartment.allowedFor === 'solo' ? 'Solo' : (apartment.allowedFor === 'group' ? 'Group' : (apartment.allowedFor === 'both' ? 'Both' : 'Everyone'))}</li>
+                    <li class="list-group-item"><strong>Suitable for:</strong> ${apartment.allowedFor === 'solo' ? 'Solo' : (apartment.allowedFor === 'group' ? 'Group' : (apartment.allowedFor === 'both' ? 'Both (Solo & Group)' : 'N/A'))}</li>
                     <li class="list-group-item"><strong>Monthly Rate:</strong> $${apartment.monthlyRate}</li>
                     <li class="list-group-item"><strong>Status:</strong> ${isBooked ? '<span class="text-danger fw-bold">RENTED</span>' : '<span class="text-success fw-bold">AVAILABLE</span>'}</li>
                 </ul>

@@ -117,7 +117,7 @@
                             <li class="list-group-item"><strong>Location:</strong> ${apartment.address || 'N/A'}</li>
                             <li class="list-group-item"><strong>District:</strong> ${apartment.district || 'N/A'}</li>
                             <li class="list-group-item"><strong>Available from:</strong> ${formatDate(apartment.availability) || 'N/A'}</li>
-                            <li class="list-group-item"><strong>Suitable for:</strong> ${apartment.allowedFor || 'Everyone'}</li>
+                            <li class="list-group-item"><strong>Suitable for:</strong> ${apartment.allowedFor === 'solo' ? 'Solo' : (apartment.allowedFor === 'group' ? 'Group' : (apartment.allowedFor === 'both' ? 'Both (Solo & Group)' : 'N/A'))}</li>
                             <li class="list-group-item"><strong>Status:</strong> ${isBooked ? '<span class="text-danger fw-bold">RENTED</span>' : '<span class="text-success fw-bold">AVAILABLE</span>'}</li>
                         </ul>
                     </div>
