@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Payment Success</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-success">Payment Successful!</h2>
+    <p>Transaction ID: <strong id="tranId" th:text="${tranId}"></strong></p>
+    <p>Amount Paid: <strong th:text="${amount}"></strong></p>
+    <p>Card Type: <strong th:text="${cardType}"></strong></p>
+    <button id="downloadReceiptBtn" class="btn btn-primary">Download Receipt</button>
+    </div>
+    <script>
+    document.getElementById('downloadReceiptBtn').onclick = function() {
+        var tranId = document.getElementById('tranId').textContent.trim();
+        if(tranId) {
+            window.location.href = '/payment-success/download?tran_id=' + encodeURIComponent(tranId);
+        } else {
+            alert('Transaction ID not found.');
+        }
+    };
+    </script>
+</body>
+</html>
