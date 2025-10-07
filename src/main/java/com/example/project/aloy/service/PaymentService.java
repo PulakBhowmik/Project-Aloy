@@ -62,4 +62,38 @@ public class PaymentService {
             System.out.println("[INFO Service] No apartment associated with this payment");
         }
     }
+
+    /**
+     * Allows a tenant to vacate an apartment by setting a vacate date
+     * Automatically marks the apartment as AVAILABLE
+     */
+    @Transactional
+    public void vacateApartment(Long tenantId, Long apartmentId, String vacateDate) {
+        System.out.println("[DEBUG Service] Tenant " + tenantId + " vacating apartment " + apartmentId + " on " + vacateDate);
+        
+        // Find the payment record for this tenant and apartment
+        Optional<Payment> paymentOpt = paymentRepository.findByTenantIdAndApartmentId(tenantId, apartmentId);
+        
+        if (paymentOpt.isEmpty()) {
+            throw new RuntimeException("No booking found for this tenant and apartment");
+        }
+        
+        Payment payment = paymentOpt.get();
+        
+        // Set the vacate date
+        payment.setVacateDate(vacateDate);
+        payment.setStatus("VACATED");
+        paymentRepository.save(payment);
+        System.out.println("[DEBUG Service] Payment record updated with vacate date");
+        
+        // Mark apartment as available
+        Optional<Apartment> apartmentOpt = apartmentRepository.findByIdForUpdate(apartmentId);
+        if (apartmentOpt.isPresent()) {
+            Apartment apartment = apartmentOpt.get();
+            apartment.setBooked(false);
+            apartment.setStatus("AVAILABLE");
+            apartmentRepository.save(apartment);
+            System.out.println("[SUCCESS Service] Apartment " + apartmentId + " marked as AVAILABLE");
+        }
+    }
 }

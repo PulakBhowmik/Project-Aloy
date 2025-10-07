@@ -17,6 +17,7 @@ public class Payment {
     private Long apartmentId; // References Apartment.apartmentId
     private String status; // PENDING, COMPLETED, FAILED
     private String createdAt;
+    private String vacateDate; // Date when tenant plans to vacate (format: YYYY-MM-DD)
 
     // Constructors
     public Payment() {}
@@ -84,5 +85,13 @@ public class Payment {
 
     public void setCreatedAt(String createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getVacateDate() {
+        return vacateDate;
+    }
+
+    public void setVacateDate(String vacateDate) {
+        this.vacateDate = vacateDate;
     }
 }

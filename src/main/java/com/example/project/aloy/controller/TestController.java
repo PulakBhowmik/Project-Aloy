@@ -116,7 +116,7 @@ public class TestController {
             user.setEmail("test@example.com");
             user.setPhoneNumber("123-456-7890");
             user.setPassword("test123"); // Set password
-            user.setRole("tenant");
+            user.setRole("TENANT");
             user.setDistrict("Downtown");
             User savedUser = userRepository.save(user);
 

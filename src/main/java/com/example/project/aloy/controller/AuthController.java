@@ -21,9 +21,30 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@RequestBody User user) {
         try {
+            // Validate required fields
+            if (user.getName() == null || user.getName().trim().isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Name is required");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+            
+            if (user.getPassword() == null || user.getPassword().trim().isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Password is required");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+            
+            if (user.getRole() == null || user.getRole().trim().isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Role is required");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+            
             // Check if email already exists
-            if (userRepository.findByEmail(user.getEmail()).isPresent()) {
-                return ResponseEntity.badRequest().body("Email already exists");
+            if (user.getEmail() != null && userRepository.findByEmail(user.getEmail()).isPresent()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Email already exists");
+                return ResponseEntity.badRequest().body(errorResponse);
             }
 
             // Save user
@@ -38,7 +59,9 @@ public class AuthController {
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Registration failed: " + e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
         }
     }
 

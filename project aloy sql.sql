@@ -135,7 +135,7 @@ SELECT COUNT(*) as total_apartments FROM apartments;
 SELECT * FROM apartments WHERE district LIKE '%Downtown%' ORDER BY monthly_rent;
 SELECT * FROM apartments WHERE monthly_rent BETWEEN 1000 AND 2500 ORDER BY monthly_rent;
 SELECT * FROM apartments WHERE availability <= '2024-01-15' ORDER BY availability;
-SELECT user_id, name, email FROM users WHERE role = 'owner' ORDER BY user_id DESC;
+SELECT user_id, name, email FROM users WHERE role = 'OWNER' ORDER BY user_id DESC;
 
 -- 3. Create Apartment 4 (Budget Studio)
 -- Replace X with actual owner_id from step 2

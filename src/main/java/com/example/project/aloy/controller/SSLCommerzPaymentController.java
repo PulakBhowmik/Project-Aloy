@@ -38,6 +38,9 @@ public class SSLCommerzPaymentController {
 
     @Autowired
     private ApartmentRepository apartmentRepository;
+    
+    @Autowired
+    private com.example.project.aloy.service.RoommateGroupService roommateGroupService;
 
     @PostMapping("/initiate")
     @org.springframework.transaction.annotation.Transactional
@@ -298,6 +301,203 @@ public class SSLCommerzPaymentController {
         } catch (Exception e) {
             e.printStackTrace(); // Print full stack trace for debugging
             return ResponseEntity.status(500).body("Error: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/initiate-group")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<?> initiateGroupPayment(@RequestBody Map<String, Object> paymentRequest) {
+        System.out.println("[DEBUG GROUP] Group payment initiation request: " + paymentRequest);
+        
+        // Extract groupId from request
+        Long groupId = null;
+        try {
+            groupId = Long.parseLong(String.valueOf(paymentRequest.get("groupId")));
+            System.out.println("[DEBUG GROUP] GroupId: " + groupId);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "Invalid groupId"));
+        }
+        
+        // Extract tenantId
+        final Long tenantId;
+        try {
+            tenantId = Long.parseLong(String.valueOf(paymentRequest.get("tenantId")));
+            System.out.println("[DEBUG GROUP] TenantId: " + tenantId);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "Invalid tenantId"));
+        }
+        
+        // Extract apartmentId
+        Long apartmentId = null;
+        try {
+            apartmentId = Long.parseLong(String.valueOf(paymentRequest.get("apartmentId")));
+            System.out.println("[DEBUG GROUP] ApartmentId: " + apartmentId);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "Invalid apartmentId"));
+        }
+        
+        // Verify group exists and is ready
+        java.util.Optional<com.example.project.aloy.model.RoommateGroup> groupOpt = roommateGroupService.getGroupById(groupId);
+        if (groupOpt.isEmpty()) {
+            System.out.println("[ERROR GROUP] Group " + groupId + " not found");
+            return ResponseEntity.status(404).body(Collections.singletonMap("error", "Group not found"));
+        }
+        
+        com.example.project.aloy.model.RoommateGroup group = groupOpt.get();
+        
+        // Verify group status is READY
+        if (group.getStatus() != com.example.project.aloy.model.GroupStatus.READY) {
+            System.out.println("[ERROR GROUP] Group " + groupId + " is not READY (status: " + group.getStatus() + ")");
+            return ResponseEntity.status(400).body(Collections.singletonMap("error", "Group is not ready for booking. All 4 members must join first."));
+        }
+        
+        // Verify tenant is a member of the group
+        boolean isMember = group.getMembers().stream()
+            .anyMatch(member -> member.getTenant().getUserId().equals(tenantId));
+        if (!isMember) {
+            System.out.println("[ERROR GROUP] Tenant " + tenantId + " is not a member of group " + groupId);
+            return ResponseEntity.status(403).body(Collections.singletonMap("error", "You are not a member of this group"));
+        }
+        
+        System.out.println("[DEBUG GROUP] Group validation passed. Group " + groupId + " is READY with " + group.getMemberCount() + " members");
+        
+        // Call the existing initiatePayment method
+        // But we need to mark this payment as a group payment
+        System.out.println("[DEBUG GROUP] Proceeding with payment initiation for group " + groupId);
+        
+        // Prepare payment data (same as solo booking)
+        Map<String, Object> payload = new HashMap<>();
+        
+        // Store credentials
+        payload.put("store_id", storeId);
+        payload.put("store_passwd", storePassword);
+        
+        // Transaction details
+        Double amount = Double.parseDouble(paymentRequest.get("amount").toString());
+        payload.put("total_amount", String.format("%.2f", amount));
+        payload.put("currency", "BDT");
+        
+        // Check apartment availability
+        String debugTranId = null;
+        try {
+            java.util.Optional<com.example.project.aloy.model.Apartment> locked = apartmentRepository.findByIdForUpdate(apartmentId);
+            if (locked.isPresent()) {
+                com.example.project.aloy.model.Apartment ap = locked.get();
+                if (ap.isBooked() || "RENTED".equalsIgnoreCase(ap.getStatus())) {
+                    System.out.println("[WARNING GROUP] Apartment " + apartmentId + " is already booked");
+                    return ResponseEntity.status(409).body(Collections.singletonMap("error", "This apartment is already booked."));
+                }
+                
+                // Create a new pending payment with group context
+                Payment p = new Payment();
+                p.setAmount(BigDecimal.valueOf(amount));
+                p.setPaymentMethod("SSLCommerz_Group");
+                p.setApartmentId(apartmentId);
+                p.setTenantId(tenantId);
+                p.setStatus("PENDING");
+                p.setCreatedAt(ZonedDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+                Payment saved = paymentRepository.save(p);
+                String tran = "GRPPAY" + saved.getPaymentId();
+                saved.setTransactionId(tran);
+                paymentRepository.save(saved);
+                debugTranId = tran;
+                payload.put("tran_id", tran);
+                System.out.println("[DEBUG GROUP] Created payment: ID=" + saved.getPaymentId() + ", TranID=" + tran);
+            } else {
+                return ResponseEntity.status(404).body(Collections.singletonMap("error", "Apartment not found"));
+            }
+        } catch (Exception e) {
+            System.out.println("[ERROR GROUP] Failed to process apartment: " + e.getMessage());
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", e.getMessage()));
+        }
+        
+        // Success/Fail/Cancel URLs with groupId parameter
+        payload.put("success_url", "http://localhost:8080/payment-success/download?tran_id=" + debugTranId + "&groupId=" + groupId);
+        payload.put("fail_url", "http://localhost:8080/payment-fail?groupId=" + groupId);
+        payload.put("cancel_url", "http://localhost:8080/payment-cancel?groupId=" + groupId);
+        
+        // Pass apartmentId, tenantId, and groupId via custom fields
+        payload.put("value_a", apartmentId.toString());
+        payload.put("value_b", tenantId.toString());
+        payload.put("value_c", "GROUP_" + groupId); // Mark as group payment
+        
+        // Customer details
+        payload.put("cus_name", paymentRequest.getOrDefault("name", "Test User"));
+        payload.put("cus_email", paymentRequest.getOrDefault("email", "test@example.com"));
+        payload.put("cus_phone", paymentRequest.getOrDefault("phone", "01700000000"));
+        payload.put("cus_add1", "Dhaka");
+        payload.put("cus_add2", "Bangladesh");
+        payload.put("cus_city", "Dhaka");
+        payload.put("cus_state", "Dhaka");
+        payload.put("cus_postcode", "1000");
+        payload.put("cus_country", "Bangladesh");
+        
+        // Shipping details
+        payload.put("shipping_method", "NO");
+        payload.put("ship_name", paymentRequest.getOrDefault("name", "Test User"));
+        payload.put("ship_add1", "Dhaka");
+        payload.put("ship_add2", "Bangladesh");
+        payload.put("ship_city", "Dhaka");
+        payload.put("ship_state", "Dhaka");
+        payload.put("ship_postcode", "1000");
+        payload.put("ship_country", "Bangladesh");
+        
+        // Product details
+        payload.put("product_name", "Apartment Rent (Group Booking)");
+        payload.put("product_category", "Rental");
+        payload.put("product_profile", "general");
+        payload.put("emi_option", 0);
+        
+        System.out.println("[DEBUG GROUP] Sending payload to SSLCommerz:");
+        payload.forEach((key, value) -> System.out.println(key + ": " + value));
+        
+        // Call SSLCommerz API
+        String apiUrl = "https://sandbox.sslcommerz.com/gwprocess/v3/api.php";
+        RestTemplate restTemplate = new RestTemplate();
+        
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
+            
+            MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+            payload.forEach((k, v) -> form.add(k, v == null ? "" : String.valueOf(v)));
+            
+            HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(form, headers);
+            ResponseEntity<String> respEntity = restTemplate.postForEntity(apiUrl, request, String.class);
+            
+            String body = respEntity.getBody();
+            System.out.println("[DEBUG GROUP] SSLCommerz response: " + body);
+            
+            if (body == null || body.isEmpty()) {
+                return ResponseEntity.status(502).body(Collections.singletonMap("error", "Empty response from payment gateway"));
+            }
+            
+            // Parse JSON response
+            Map<String, Object> response;
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                response = mapper.readValue(body, Map.class);
+            } catch (Exception jsonEx) {
+                System.out.println("[ERROR GROUP] Failed to parse JSON: " + jsonEx.getMessage());
+                return ResponseEntity.status(502).body(Collections.singletonMap("error", "Non-JSON response from gateway"));
+            }
+            
+            Object status = response.get("status");
+            Object gateway = response.get("GatewayPageURL");
+            
+            if (status != null && "FAILED".equalsIgnoreCase(String.valueOf(status))) {
+                return ResponseEntity.status(400).body(response);
+            }
+            
+            if (gateway == null || String.valueOf(gateway).isEmpty()) {
+                return ResponseEntity.status(502).body(response);
+            }
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Collections.singletonMap("error", "Error: " + e.getMessage()));
         }
     }
 

@@ -11,6 +11,9 @@ public class Apartment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long apartmentId;
 
+    // Title/Name of the apartment
+    private String title;
+
     // Address parts per ER diagram
     private String houseNo;
     private String street;
@@ -46,24 +49,12 @@ public class Apartment {
         this.apartmentId = apartmentId;
     }
 
-    // Title derived for compatibility with templates
     public String getTitle() {
-        if (this.address != null && !this.address.trim().isEmpty()) return this.address;
-        StringBuilder sb = new StringBuilder();
-        if (this.houseNo != null && !this.houseNo.isBlank()) sb.append(this.houseNo);
-        if (this.street != null && !this.street.isBlank()) {
-            if (sb.length() > 0) sb.append(", ");
-            sb.append(this.street);
-        }
-        if (this.district != null && !this.district.isBlank()) {
-            if (sb.length() > 0) sb.append(", ");
-            sb.append(this.district);
-        }
-        return sb.length() > 0 ? sb.toString() : "Apartment " + (this.apartmentId != null ? this.apartmentId : "");
+        return title;
     }
 
     public void setTitle(String title) {
-        this.address = title;
+        this.title = title;
     }
 
     public String getHouseNo() {

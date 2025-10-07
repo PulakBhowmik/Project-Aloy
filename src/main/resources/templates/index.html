@@ -70,6 +70,9 @@
         </div>
 
         <div class="col-md-4">
+            <!-- Vacate Button Container (shown for tenants with active bookings) -->
+            <div id="vacateButtonContainer"></div>
+            
             <div class="card">
                 <div class="card-header">
                     <h5>Quick Stats</h5>
@@ -109,7 +112,7 @@ function logoutUser() {
 function renderAddApartmentForm() {
     const user = JSON.parse(localStorage.getItem('user'));
     const container = document.getElementById('addApartmentCard');
-    if (user && user.role === 'owner') {
+    if (user && user.role && user.role.toUpperCase() === 'OWNER') {
         container.innerHTML = `
             <div class="card mt-4">
                 <div class="card-header bg-info text-white">
@@ -275,11 +278,11 @@ window.displayApartments = function(apartments) {
             <div class="card apartment-card h-100">
                 <img src="https://placehold.co/600x400/4f46e5/ffffff?text=${encodeURIComponent(apartment.title)}" class="card-img-top" alt="${apartment.title}">
                 <div class="card-body d-flex flex-column">
+                    <h5 class="card-title mb-3">${apartment.title}</h5>
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <div class="price-tag">$${apartment.monthlyRate}/month</div>
                         ${statusBadge}
                     </div>
-                    <h5 class="card-title">${apartment.title}</h5>
                     <p class="card-text">${apartment.description || 'No description available'}</p>
                     <div class="mt-auto">
                         <p class="mb-1"><strong>Location:</strong> ${apartment.district || 'N/A'}</p>

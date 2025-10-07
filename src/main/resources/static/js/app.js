@@ -38,7 +38,8 @@ function checkTenantBookingStatus() {
                 userHasBooking = true;
                 userBookingDetails = data;
                 console.log('[INFO] User already has a booking:', data);
-                // DO NOT show banner - let the payment modal handle the error
+                // Show vacate button for users with active bookings
+                showVacateButton(data);
             } else {
                 userHasBooking = false;
                 userBookingDetails = null;
@@ -48,6 +49,124 @@ function checkTenantBookingStatus() {
         .catch(error => {
             console.error('[ERROR] Failed to check tenant booking status:', error);
         });
+}
+
+// Show vacate button for tenants with active bookings
+function showVacateButton(bookingData) {
+    const container = document.getElementById('vacateButtonContainer');
+    if (!container) return;
+    
+    const html = `
+        <div class="card mt-4 border-warning">
+            <div class="card-header bg-warning text-dark">
+                <h5><i class="bi bi-house-door"></i> Your Current Booking</h5>
+            </div>
+            <div class="card-body">
+                <h6>${bookingData.apartmentTitle || 'Apartment'}</h6>
+                <p><strong>Monthly Rent:</strong> $${bookingData.monthlyRent}</p>
+                <p><strong>Transaction ID:</strong> ${bookingData.transactionId}</p>
+                <button class="btn btn-danger" onclick="showVacateModal()">
+                    <i class="bi bi-box-arrow-right"></i> Vacate Apartment
+                </button>
+            </div>
+        </div>
+    `;
+    container.innerHTML = html;
+}
+
+// Show vacate modal
+window.showVacateModal = function() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!userBookingDetails) {
+        alert('No active booking found');
+        return;
+    }
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    const html = `
+        <div class="modal fade" id="vacateModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title">Vacate Apartment</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p><strong>Apartment:</strong> ${userBookingDetails.apartmentTitle || 'Your apartment'}</p>
+                        <p><strong>Monthly Rent:</strong> $${userBookingDetails.monthlyRent}</p>
+                        <hr>
+                        <form id="vacateForm">
+                            <div class="mb-3">
+                                <label for="vacateDate" class="form-label">Vacate Date</label>
+                                <input type="date" class="form-control" id="vacateDate" 
+                                       min="${today}" required>
+                                <small class="form-text text-muted">
+                                    Select the date you plan to leave the apartment
+                                </small>
+                            </div>
+                            <div class="alert alert-warning">
+                                <strong>Note:</strong> Once you vacate, the apartment will be available for others to book.
+                            </div>
+                            <button type="submit" class="btn btn-danger w-100">Confirm Vacate</button>
+                        </form>
+                        <div id="vacateMessage" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', html);
+    const modal = new bootstrap.Modal(document.getElementById('vacateModal'));
+    modal.show();
+    
+    // Handle form submission
+    document.getElementById('vacateForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const vacateDate = document.getElementById('vacateDate').value;
+        
+        fetch('/api/vacate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tenantId: user.userId,
+                apartmentId: userBookingDetails.apartmentId,
+                vacateDate: vacateDate
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('vacateMessage').innerHTML = 
+                    `<div class="alert alert-success">
+                        <strong>Success!</strong> ${data.message}
+                        <br><small>Vacate Date: ${data.vacateDate}</small>
+                    </div>`;
+                
+                // Clear booking status
+                userHasBooking = false;
+                userBookingDetails = null;
+                
+                // Reload page after 2 seconds
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            } else {
+                document.getElementById('vacateMessage').innerHTML = 
+                    `<div class="alert alert-danger">
+                        <strong>Error:</strong> ${data.error || 'Failed to vacate apartment'}
+                    </div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('vacateMessage').innerHTML = 
+                `<div class="alert alert-danger">
+                    <strong>Error:</strong> Failed to process vacate request
+                </div>`;
+        });
+    });
 }
 
 // Function removed - no longer showing warning banner on homepage
@@ -141,11 +260,11 @@ function displayApartments(apartments) {
             <div class="card apartment-card h-100">
                 <img src="https://placehold.co/600x400/4f46e5/ffffff?text=${encodeURIComponent(apartment.title)}" class="card-img-top" alt="${apartment.title}">
                 <div class="card-body d-flex flex-column">
+                    <h5 class="card-title mb-3">${apartment.title}</h5>
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <div class="price-tag">$${apartment.monthlyRate}/month</div>
                         ${statusBadge}
                     </div>
-                    <h5 class="card-title">${apartment.title}</h5>
                     <p class="card-text">${apartment.description || 'No description available'}</p>
                     <div class="mt-auto">
                         <p class="mb-1"><strong>Location:</strong> ${apartment.district || 'N/A'}</p>
@@ -739,28 +858,142 @@ window.leaveGroup = function(groupId, apartmentId) {
     });
 };
 
-// Book apartment for group (payment)
+// Book apartment for group (payment with SSLCommerz)
 window.bookApartmentForGroup = function(groupId, apartmentId, amount) {
     const user = JSON.parse(localStorage.getItem('user'));
     
-    if (!confirm('Proceed with payment of $' + amount + ' to book this apartment for your group?')) return;
+    if (!user) {
+        alert('Please log in first');
+        return;
+    }
     
-    fetch('/api/groups/' + groupId + '/book', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId: user.userId })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            alert('✓ Apartment booked successfully for your group!');
-            bootstrap.Modal.getInstance(document.getElementById('groupModal')).hide();
-            location.reload(); // Refresh to show updated apartment status
-        } else {
-            document.getElementById('groupMsg').innerHTML = 
-                '<div class="alert alert-danger">' + data.message + '</div>';
-        }
-    });
+    // Show payment modal with SSLCommerz integration
+    var html = '<div class="modal fade" id="groupPaymentModal" tabindex="-1" aria-hidden="true">' +
+        '<div class="modal-dialog">' +
+            '<div class="modal-content">' +
+                '<div class="modal-header bg-success text-white">' +
+                    '<h5 class="modal-title">💳 Group Payment</h5>' +
+                    '<button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
+                '</div>' +
+                '<div class="modal-body">' +
+                    '<div class="alert alert-info">' +
+                        '<strong>Group Booking:</strong> You are paying on behalf of your group.<br>' +
+                        '<small>Group ID: ' + groupId + '</small>' +
+                    '</div>' +
+                    '<form id="groupSslcommerzPaymentForm">' +
+                        '<div class="mb-3">' +
+                            '<label class="form-label">Amount (BDT)</label>' +
+                            '<input type="number" class="form-control" id="groupPaymentAmount" value="' + amount + '" required readonly />' +
+                        '</div>' +
+                        '<div class="mb-3">' +
+                            '<label class="form-label">Name</label>' +
+                            '<input type="text" class="form-control" id="groupCusName" value="' + (user.name || '') + '" required />' +
+                        '</div>' +
+                        '<div class="mb-3">' +
+                            '<label class="form-label">Email</label>' +
+                            '<input type="email" class="form-control" id="groupCusEmail" value="' + (user.email || 'test@example.com') + '" required />' +
+                        '</div>' +
+                        '<div class="mb-3">' +
+                            '<label class="form-label">Phone</label>' +
+                            '<input type="text" class="form-control" id="groupCusPhone" value="01700000000" required />' +
+                        '</div>' +
+                        '<button type="submit" class="btn btn-success w-100 btn-lg">' +
+                            '<i class="bi bi-credit-card"></i> Pay ৳' + amount + ' with SSLCommerz' +
+                        '</button>' +
+                    '</form>' +
+                    '<div id="groupPaymentMsg" class="mt-3"></div>' +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+    '</div>';
+    
+    // Insert modal into groupModalContainer or create a dedicated container
+    const container = document.getElementById('groupModalContainer') || document.getElementById('paymentModalContainer');
+    if (container) {
+        container.innerHTML = html;
+    } else {
+        // Create container if it doesn't exist
+        const newContainer = document.createElement('div');
+        newContainer.id = 'groupPaymentModalContainer';
+        document.body.appendChild(newContainer);
+        newContainer.innerHTML = html;
+    }
+    
+    const modal = new bootstrap.Modal(document.getElementById('groupPaymentModal'));
+    modal.show();
+    
+    // Handle form submission after modal is shown
+    setTimeout(function() {
+        document.getElementById('groupSslcommerzPaymentForm').onsubmit = function(e) {
+            e.preventDefault();
+            
+            const paymentData = {
+                amount: parseFloat(document.getElementById('groupPaymentAmount').value),
+                name: document.getElementById('groupCusName').value,
+                email: document.getElementById('groupCusEmail').value,
+                phone: document.getElementById('groupCusPhone').value,
+                apartmentId: parseInt(apartmentId),
+                tenantId: user.userId,
+                groupId: groupId // Include groupId for backend processing
+            };
+            
+            console.log('[DEBUG] Initiating group payment:', paymentData);
+            
+            // First, verify the group is ready and user is a member
+            fetch('/api/groups/' + groupId)
+                .then(res => res.json())
+                .then(group => {
+                    if (group.status !== 'READY') {
+                        throw new Error('Group is not ready for booking. All 4 members must join first.');
+                    }
+                    if (!group.members.some(m => m.tenant.userId === user.userId)) {
+                        throw new Error('You are not a member of this group.');
+                    }
+                    
+                    // Proceed with payment initiation
+                    return fetch('/api/payments/initiate-group', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(paymentData)
+                    });
+                })
+                .then(function(res) { 
+                    if (!res.ok) {
+                        if (res.status === 409) {
+                            return res.json().then(function(errorData) {
+                                throw new Error(errorData.error || 'Payment conflict occurred.');
+                            });
+                        } else {
+                            return res.json().then(function(errorData) {
+                                throw new Error(errorData.error || 'Payment failed');
+                            });
+                        }
+                    }
+                    return res.json(); 
+                })
+                .then(function(resp) {
+                    if (resp && resp.GatewayPageURL) {
+                        // Store group context for payment callback
+                        localStorage.setItem('pendingGroupBooking', JSON.stringify({
+                            groupId: groupId,
+                            apartmentId: apartmentId,
+                            timestamp: Date.now()
+                        }));
+                        // Redirect to SSLCommerz payment gateway
+                        window.location.href = resp.GatewayPageURL;
+                    } else {
+                        var errorMsg = resp && typeof resp === 'string' ? resp : (resp && resp.error ? resp.error : JSON.stringify(resp));
+                        document.getElementById('groupPaymentMsg').innerHTML = 
+                            '<div class="alert alert-danger">Failed to initiate payment.<br>' + (errorMsg ? errorMsg : '') + '</div>';
+                    }
+                })
+                .catch(function(error) {
+                    console.error('Group payment error:', error);
+                    document.getElementById('groupPaymentMsg').innerHTML = 
+                        '<div class="alert alert-danger"><strong>Error:</strong> ' + error.message + '</div>';
+                });
+        };
+    }, 100);
 };
 
 // Copy invite link

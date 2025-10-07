@@ -46,8 +46,8 @@
                             <label for="role" class="form-label">I am a</label>
                             <select class="form-select" id="role" required>
                                 <option value="">Select role</option>
-                                <option value="tenant">Tenant</option>
-                                <option value="owner">Owner</option>
+                                <option value="TENANT">Tenant</option>
+                                <option value="OWNER">Owner</option>
                             </select>
                         </div>
                         <div class="mb-3">
@@ -86,18 +86,26 @@
             },
             body: JSON.stringify(userData)
         })
-        .then(response => response.json())
+        .then(response => {
+            return response.json().then(data => {
+                if (!response.ok) {
+                    // Handle HTTP error responses with JSON error message
+                    throw new Error(data.error || data.message || 'Registration failed');
+                }
+                return data;
+            });
+        })
         .then(data => {
             if (data.userId) {
                 alert('Registration successful! Welcome, ' + data.name);
                 window.location.href = '/login';
             } else {
-                alert('Registration failed: ' + (data.message || 'Please try again'));
+                alert('Registration failed: ' + (data.error || data.message || 'Please try again'));
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Registration failed. Please try again.');
+            alert('Registration failed: ' + error.message);
         });
     });
 </script>

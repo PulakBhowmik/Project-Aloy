@@ -125,6 +125,8 @@ public class PaymentResultController {
     private ApartmentRepository apartmentRepository;
     @Autowired
     private com.example.project.aloy.service.PaymentService paymentService;
+    @Autowired
+    private com.example.project.aloy.service.RoommateGroupService roommateGroupService;
 
     @PostMapping("/payment-success")
     @Transactional
@@ -159,24 +161,58 @@ public class PaymentResultController {
         // Link apartment and tenant if provided
         String aptIdStr = allParams.getOrDefault("value_a", "");
         String tenantIdStr = allParams.getOrDefault("value_b", "");
+        String groupMarker = allParams.getOrDefault("value_c", ""); // Check if this is a group payment
+        
+        // Check if this is a group payment
+        boolean isGroupPayment = groupMarker.startsWith("GROUP_");
+        Long groupId = null;
+        if (isGroupPayment) {
+            try {
+                String groupIdStr = groupMarker.substring(6); // Remove "GROUP_" prefix
+                groupId = Long.parseLong(groupIdStr);
+                System.out.println("[DEBUG GROUP] Detected group payment for group ID: " + groupId);
+            } catch (Exception e) {
+                System.out.println("[ERROR GROUP] Failed to parse groupId from value_c: " + groupMarker);
+            }
+        }
+        
         if (!aptIdStr.isEmpty()) {
             try {
                 Long aptId = Long.parseLong(aptIdStr);
-                Optional<Apartment> lockedAptOpt = apartmentRepository.findByIdForUpdate(aptId);
-                if (lockedAptOpt.isPresent()) {
-                    Apartment apt = lockedAptOpt.get();
-                    if (!apt.isBooked()) {
-                        System.out.println("[DEBUG] Marking apartment " + aptId + " as booked and RENTED");
-                        apt.setBooked(true);
-                        apt.setStatus("RENTED");
-                        apartmentRepository.save(apt);
-                        System.out.println("[DEBUG] Apartment " + aptId + " successfully marked as booked");
-                    } else {
-                        System.out.println("[WARNING] Apartment " + aptId + " is already booked!");
+                Long tenantId = !tenantIdStr.isEmpty() ? Long.parseLong(tenantIdStr) : null;
+                
+                // If this is a group payment, use RoommateGroupService to book the apartment
+                if (isGroupPayment && groupId != null && tenantId != null) {
+                    System.out.println("[DEBUG GROUP] Booking apartment " + aptId + " for group " + groupId + " by tenant " + tenantId);
+                    try {
+                        roommateGroupService.bookApartment(groupId, tenantId);
+                        System.out.println("[DEBUG GROUP] Group " + groupId + " successfully booked apartment " + aptId);
+                        paymentRecord.setApartmentId(aptId);
+                        paymentRecord.setTenantId(tenantId);
+                    } catch (Exception e) {
+                        System.out.println("[ERROR GROUP] Failed to book apartment for group: " + e.getMessage());
+                        e.printStackTrace();
                     }
-                    paymentRecord.setApartmentId(aptId);
+                } else {
+                    // Solo booking - mark apartment as booked directly
+                    Optional<Apartment> lockedAptOpt = apartmentRepository.findByIdForUpdate(aptId);
+                    if (lockedAptOpt.isPresent()) {
+                        Apartment apt = lockedAptOpt.get();
+                        if (!apt.isBooked()) {
+                            System.out.println("[DEBUG] Marking apartment " + aptId + " as booked and RENTED (solo booking)");
+                            apt.setBooked(true);
+                            apt.setStatus("RENTED");
+                            apartmentRepository.save(apt);
+                            System.out.println("[DEBUG] Apartment " + aptId + " successfully marked as booked");
+                        } else {
+                            System.out.println("[WARNING] Apartment " + aptId + " is already booked!");
+                        }
+                        paymentRecord.setApartmentId(aptId);
+                    }
                 }
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException e) {
+                System.out.println("[ERROR] Failed to parse apartmentId or tenantId: " + e.getMessage());
+            }
         }
         if (!tenantIdStr.isEmpty()) {
             try { paymentRecord.setTenantId(Long.parseLong(tenantIdStr)); } catch (NumberFormatException ignored) {}

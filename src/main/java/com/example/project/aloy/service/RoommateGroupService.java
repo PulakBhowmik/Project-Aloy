@@ -47,7 +47,7 @@ public class RoommateGroupService {
         User creator = userRepository.findById(creatorId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (!"TENANT".equals(creator.getRole())) {
+        if (!"TENANT".equalsIgnoreCase(creator.getRole())) {
             throw new RuntimeException("Only tenants can create groups");
         }
 
@@ -100,7 +100,7 @@ public class RoommateGroupService {
         User tenant = userRepository.findById(tenantId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (!"TENANT".equals(tenant.getRole())) {
+        if (!"TENANT".equalsIgnoreCase(tenant.getRole())) {
             throw new RuntimeException("Only tenants can join groups");
         }
 
@@ -155,18 +155,20 @@ public class RoommateGroupService {
 
         // Remove member
         memberRepository.delete(member);
+        memberRepository.flush(); // Force immediate deletion
 
-        // Check remaining members
-        group = groupRepository.findById(groupId).get();
-        int remainingMembers = group.getMemberCount();
+        // Check remaining members - query database directly to avoid cache
+        int remainingMembers = memberRepository.findByGroup_GroupId(groupId).size();
 
         if (remainingMembers == 0) {
             // No members left, delete group
             groupRepository.delete(group);
+            groupRepository.flush();
         } else if (group.getStatus() == GroupStatus.READY && remainingMembers < 4) {
             // Group was ready but now not full, set back to forming
             group.setStatus(GroupStatus.FORMING);
             groupRepository.save(group);
+            groupRepository.flush();
         }
     }
 
