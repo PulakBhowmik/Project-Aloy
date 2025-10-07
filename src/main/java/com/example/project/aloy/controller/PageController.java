@@ -30,4 +30,9 @@ public class PageController {
     public String joinGroup() {
         return "join-group";
     }
+
+    @GetMapping("/owner-dashboard")
+    public String ownerDashboard() {
+        return "owner-dashboard";
+    }
 }

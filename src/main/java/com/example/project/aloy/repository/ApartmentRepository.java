@@ -21,4 +21,7 @@ public interface ApartmentRepository extends JpaRepository<Apartment, Long> {
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select a from Apartment a where a.apartmentId = :id")
 	java.util.Optional<Apartment> findByIdForUpdate(@Param("id") Long id);
+	
+	// Find all apartments by owner ID
+	java.util.List<Apartment> findByOwnerId(Long ownerId);
 }

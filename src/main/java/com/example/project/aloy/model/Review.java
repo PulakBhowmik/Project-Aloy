@@ -12,8 +12,17 @@ public class Review {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long reviewId;
 
-    private BigDecimal rating;
+    private Integer rating; // 1-5 stars
     private String remarks;
+    
+    @Column(length = 500)
+    private String goodSides;
+    
+    @Column(length = 500)
+    private String badSides;
+    
+    private String tenantName; // Display name of reviewer
+    
     private Long userId; // References User.userId
     private Long apartmentId; // References Apartment.apartmentId
     private LocalDate date;
@@ -30,11 +39,11 @@ public class Review {
         this.reviewId = reviewId;
     }
 
-    public BigDecimal getRating() {
+    public Integer getRating() {
         return rating;
     }
 
-    public void setRating(BigDecimal rating) {
+    public void setRating(Integer rating) {
         this.rating = rating;
     }
 
@@ -68,5 +77,29 @@ public class Review {
 
     public void setDate(LocalDate date) {
         this.date = date;
+    }
+
+    public String getGoodSides() {
+        return goodSides;
+    }
+
+    public void setGoodSides(String goodSides) {
+        this.goodSides = goodSides;
+    }
+
+    public String getBadSides() {
+        return badSides;
+    }
+
+    public void setBadSides(String badSides) {
+        this.badSides = badSides;
+    }
+
+    public String getTenantName() {
+        return tenantName;
+    }
+
+    public void setTenantName(String tenantName) {
+        this.tenantName = tenantName;
     }
 }

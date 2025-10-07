@@ -63,7 +63,7 @@ function showVacateButton(bookingData) {
             </div>
             <div class="card-body">
                 <h6>${bookingData.apartmentTitle || 'Apartment'}</h6>
-                <p><strong>Monthly Rent:</strong> $${bookingData.monthlyRent}</p>
+                <p><strong>Monthly Rent:</strong> ৳${bookingData.monthlyRent}</p>
                 <p><strong>Transaction ID:</strong> ${bookingData.transactionId}</p>
                 <button class="btn btn-danger" onclick="showVacateModal()">
                     <i class="bi bi-box-arrow-right"></i> Vacate Apartment
@@ -94,7 +94,7 @@ window.showVacateModal = function() {
                     </div>
                     <div class="modal-body">
                         <p><strong>Apartment:</strong> ${userBookingDetails.apartmentTitle || 'Your apartment'}</p>
-                        <p><strong>Monthly Rent:</strong> $${userBookingDetails.monthlyRent}</p>
+                        <p><strong>Monthly Rent:</strong> ৳${userBookingDetails.monthlyRent}</p>
                         <hr>
                         <form id="vacateForm">
                             <div class="mb-3">
@@ -142,16 +142,17 @@ window.showVacateModal = function() {
                     `<div class="alert alert-success">
                         <strong>Success!</strong> ${data.message}
                         <br><small>Vacate Date: ${data.vacateDate}</small>
+                        <br><br>
+                        <button class="btn btn-primary" onclick="showReviewModal(${userBookingDetails.apartmentId})">
+                            <i class="bi bi-star-fill"></i> Leave a Review
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.location.reload()">Skip</button>
                     </div>`;
                 
                 // Clear booking status
                 userHasBooking = false;
+                const apartmentId = userBookingDetails.apartmentId;
                 userBookingDetails = null;
-                
-                // Reload page after 2 seconds
-                setTimeout(() => {
-                    window.location.reload();
-                }, 2000);
             } else {
                 document.getElementById('vacateMessage').innerHTML = 
                     `<div class="alert alert-danger">
@@ -262,7 +263,7 @@ function displayApartments(apartments) {
                 <div class="card-body d-flex flex-column">
                     <h5 class="card-title mb-3">${apartment.title}</h5>
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div class="price-tag">$${apartment.monthlyRate}/month</div>
+                        <div class="price-tag">৳${apartment.monthlyRate}/month</div>
                         ${statusBadge}
                     </div>
                     <p class="card-text">${apartment.description || 'No description available'}</p>
@@ -1003,3 +1004,251 @@ window.copyInviteLink = function() {
     document.execCommand('copy');
     alert('Invite link copied to clipboard!');
 };
+
+// ============ REVIEW SYSTEM ============
+
+// Show review modal after vacating
+function showReviewModal(apartmentId) {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) {
+        alert('Please login to leave a review');
+        return;
+    }
+    
+    const html = `
+        <div class="modal fade" id="reviewModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-star-fill text-warning"></i> Leave a Review</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="reviewForm">
+                            <div class="mb-3">
+                                <label class="form-label">Rating *</label>
+                                <div class="star-rating" id="starRating">
+                                    <i class="bi bi-star rating-star" data-rating="1"></i>
+                                    <i class="bi bi-star rating-star" data-rating="2"></i>
+                                    <i class="bi bi-star rating-star" data-rating="3"></i>
+                                    <i class="bi bi-star rating-star" data-rating="4"></i>
+                                    <i class="bi bi-star rating-star" data-rating="5"></i>
+                                </div>
+                                <input type="hidden" id="ratingValue" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="goodSides" class="form-label">
+                                    <i class="bi bi-hand-thumbs-up text-success"></i> What did you like? *
+                                </label>
+                                <textarea class="form-control" id="goodSides" rows="3" 
+                                    maxlength="500" placeholder="Share the positive aspects of your stay..." required></textarea>
+                                <small class="text-muted">Max 500 characters</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="badSides" class="form-label">
+                                    <i class="bi bi-hand-thumbs-down text-danger"></i> What could be improved?
+                                </label>
+                                <textarea class="form-control" id="badSides" rows="3" 
+                                    maxlength="500" placeholder="Share areas that need improvement (optional)"></textarea>
+                                <small class="text-muted">Max 500 characters</small>
+                            </div>
+                            
+                            <div id="reviewMessage"></div>
+                            
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary">Submit Review</button>
+                                <button type="button" class="btn btn-secondary" onclick="window.location.reload()">Skip</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('reviewModal');
+    if (existingModal) existingModal.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', html);
+    const modal = new bootstrap.Modal(document.getElementById('reviewModal'));
+    modal.show();
+    
+    // Star rating functionality
+    let selectedRating = 0;
+    const stars = document.querySelectorAll('.rating-star');
+    stars.forEach(star => {
+        star.addEventListener('click', function() {
+            selectedRating = parseInt(this.dataset.rating);
+            document.getElementById('ratingValue').value = selectedRating;
+            updateStarDisplay(selectedRating);
+        });
+        
+        star.addEventListener('mouseenter', function() {
+            const rating = parseInt(this.dataset.rating);
+            updateStarDisplay(rating);
+        });
+    });
+    
+    document.getElementById('starRating').addEventListener('mouseleave', function() {
+        updateStarDisplay(selectedRating);
+    });
+    
+    function updateStarDisplay(rating) {
+        stars.forEach((star, index) => {
+            if (index < rating) {
+                star.classList.remove('bi-star');
+                star.classList.add('bi-star-fill', 'text-warning');
+            } else {
+                star.classList.remove('bi-star-fill', 'text-warning');
+                star.classList.add('bi-star');
+            }
+        });
+    }
+    
+    // Handle form submission
+    document.getElementById('reviewForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const rating = document.getElementById('ratingValue').value;
+        if (!rating) {
+            document.getElementById('reviewMessage').innerHTML = 
+                '<div class="alert alert-warning">Please select a rating</div>';
+            return;
+        }
+        
+        const goodSides = document.getElementById('goodSides').value.trim();
+        const badSides = document.getElementById('badSides').value.trim();
+        
+        fetch('/api/reviews/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: user.userId,
+                apartmentId: apartmentId,
+                rating: parseInt(rating),
+                goodSides: goodSides,
+                badSides: badSides || 'No concerns mentioned'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                document.getElementById('reviewMessage').innerHTML = 
+                    `<div class="alert alert-success">
+                        <strong>Thank you!</strong> ${data.message}
+                    </div>`;
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            } else {
+                document.getElementById('reviewMessage').innerHTML = 
+                    `<div class="alert alert-danger">${data.error}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('reviewMessage').innerHTML = 
+                `<div class="alert alert-danger">Failed to submit review</div>`;
+        });
+    });
+}
+
+// Load and display reviews for an apartment
+function loadApartmentReviews(apartmentId) {
+    fetch(`/api/reviews/apartment/${apartmentId}`)
+        .then(response => response.json())
+        .then(data => {
+            displayReviews(data.reviews, data.averageRating, data.totalReviews);
+        })
+        .catch(error => {
+            console.error('Error loading reviews:', error);
+        });
+}
+
+function displayReviews(reviews, avgRating, totalReviews) {
+    const container = document.getElementById('reviewsContainer');
+    if (!container) return;
+    
+    if (totalReviews === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="bi bi-chat-quote" style="font-size: 3rem;"></i>
+                <p>No reviews yet. Be the first to share your experience!</p>
+            </div>`;
+        return;
+    }
+    
+    let html = `
+        <div class="reviews-summary mb-4">
+            <div class="row align-items-center">
+                <div class="col-md-4 text-center">
+                    <h2 class="mb-0">${avgRating.toFixed(1)}</h2>
+                    <div class="star-display mb-2">
+                        ${getStarHTML(Math.round(avgRating))}
+                    </div>
+                    <p class="text-muted">${totalReviews} review${totalReviews > 1 ? 's' : ''}</p>
+                </div>
+                <div class="col-md-8">
+                    <p class="mb-0">Based on ${totalReviews} tenant review${totalReviews > 1 ? 's' : ''}</p>
+                </div>
+            </div>
+        </div>
+        <hr>
+    `;
+    
+    reviews.forEach(review => {
+        const reviewDate = new Date(review.date).toLocaleDateString('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric'
+        });
+        
+        html += `
+            <div class="review-card mb-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h6 class="mb-1">${review.tenantName || 'Anonymous'}</h6>
+                        <div class="star-display">
+                            ${getStarHTML(review.rating)}
+                        </div>
+                    </div>
+                    <small class="text-muted">${reviewDate}</small>
+                </div>
+                
+                ${review.goodSides ? `
+                    <div class="mb-2">
+                        <strong class="text-success">
+                            <i class="bi bi-hand-thumbs-up"></i> Liked:
+                        </strong>
+                        <p class="mb-0 ms-3">${review.goodSides}</p>
+                    </div>
+                ` : ''}
+                
+                ${review.badSides && review.badSides !== 'No concerns mentioned' ? `
+                    <div class="mb-2">
+                        <strong class="text-danger">
+                            <i class="bi bi-hand-thumbs-down"></i> Could improve:
+                        </strong>
+                        <p class="mb-0 ms-3">${review.badSides}</p>
+                    </div>
+                ` : ''}
+            </div>
+            <hr>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function getStarHTML(rating) {
+    let html = '';
+    for (let i = 1; i <= 5; i++) {
+        if (i <= rating) {
+            html += '<i class="bi bi-star-fill text-warning"></i>';
+        } else {
+            html += '<i class="bi bi-star text-warning"></i>';
+        }
+    }
+    return html;
+}

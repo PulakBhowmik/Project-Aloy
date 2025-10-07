@@ -34,6 +34,13 @@ public class ApartmentController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // Get all apartments by owner ID
+    @GetMapping("/owner/{ownerId}")
+    public ResponseEntity<List<Apartment>> getApartmentsByOwnerId(@PathVariable Long ownerId) {
+        List<Apartment> apartments = apartmentRepository.findByOwnerId(ownerId);
+        return ResponseEntity.ok(apartments);
+    }
+
     // Create new apartment (for owners)
     @PostMapping
     public ResponseEntity<?> createApartment(@RequestBody Apartment apartment) {
@@ -66,15 +73,41 @@ public class ApartmentController {
             }
 
             Apartment apartment = existingApartment.get();
-            apartment.setTitle(apartmentDetails.getTitle());
-            apartment.setDescription(apartmentDetails.getDescription());
-            apartment.setMonthlyRate(apartmentDetails.getMonthlyRate());
-            apartment.setAvailability(apartmentDetails.getAvailability());
-            apartment.setDistrict(apartmentDetails.getDistrict());
-            apartment.setStreet(apartmentDetails.getStreet());
-            apartment.setHouseNo(apartmentDetails.getHouseNo());
-            apartment.setAddress(apartmentDetails.getAddress());
-            apartment.setAllowedFor(apartmentDetails.getAllowedFor());
+            
+            // Verify that the owner is updating their own apartment (frontend will send ownerId)
+            if (apartmentDetails.getOwnerId() != null && 
+                !apartment.getOwnerId().equals(apartmentDetails.getOwnerId())) {
+                return ResponseEntity.status(403).body("You can only edit your own apartments");
+            }
+            
+            // Update fields
+            if (apartmentDetails.getTitle() != null) {
+                apartment.setTitle(apartmentDetails.getTitle());
+            }
+            if (apartmentDetails.getDescription() != null) {
+                apartment.setDescription(apartmentDetails.getDescription());
+            }
+            if (apartmentDetails.getMonthlyRate() != null) {
+                apartment.setMonthlyRate(apartmentDetails.getMonthlyRate());
+            }
+            if (apartmentDetails.getAvailability() != null) {
+                apartment.setAvailability(apartmentDetails.getAvailability());
+            }
+            if (apartmentDetails.getDistrict() != null) {
+                apartment.setDistrict(apartmentDetails.getDistrict());
+            }
+            if (apartmentDetails.getStreet() != null) {
+                apartment.setStreet(apartmentDetails.getStreet());
+            }
+            if (apartmentDetails.getHouseNo() != null) {
+                apartment.setHouseNo(apartmentDetails.getHouseNo());
+            }
+            if (apartmentDetails.getAddress() != null) {
+                apartment.setAddress(apartmentDetails.getAddress());
+            }
+            if (apartmentDetails.getAllowedFor() != null) {
+                apartment.setAllowedFor(apartmentDetails.getAllowedFor());
+            }
 
             Apartment updatedApartment = apartmentRepository.save(apartment);
             return ResponseEntity.ok(updatedApartment);
