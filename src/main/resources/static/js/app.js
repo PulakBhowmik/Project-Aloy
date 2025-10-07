@@ -1,5 +1,12 @@
+// Global variable to track if user has an existing booking
+let userHasBooking = false;
+let userBookingDetails = null;
+
 // Wait for DOM to load
 document.addEventListener('DOMContentLoaded', function() {
+    // Check tenant booking status first
+    checkTenantBookingStatus();
+
     // Load apartments when page loads
     loadApartments();
 
@@ -15,6 +22,35 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load stats
     loadStats();
 });
+
+// Check if current tenant already has a booking
+function checkTenantBookingStatus() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user || !user.userId) {
+        console.log('[INFO] No user logged in, skipping booking status check');
+        return;
+    }
+
+    fetch(`/api/tenants/${user.userId}/booking-status`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.hasBooking) {
+                userHasBooking = true;
+                userBookingDetails = data;
+                console.log('[INFO] User already has a booking:', data);
+                // DO NOT show banner - let the payment modal handle the error
+            } else {
+                userHasBooking = false;
+                userBookingDetails = null;
+                console.log('[INFO] User has no existing booking');
+            }
+        })
+        .catch(error => {
+            console.error('[ERROR] Failed to check tenant booking status:', error);
+        });
+}
+
+// Function removed - no longer showing warning banner on homepage
 
 // Load all apartments
 function loadApartments() {
@@ -229,6 +265,7 @@ window.showApartmentDetailsModal = function(apartmentId) {
     fetch('/api/apartments/' + apartmentId)
         .then(function(response) { return response.json(); })
         .then(function(apartment) {
+            // Don't disable buttons - let the payment modal show the error
             var html = '<img src="https://placehold.co/800x400/4f46e5/ffffff?text=' + encodeURIComponent(apartment.title) + '" class="img-fluid mb-3" alt="' + apartment.title + '">' +
                 '<h3>' + apartment.title + '</h3>' +
                 '<p><strong>Description:</strong> ' + (apartment.description || 'No description available') + '</p>' +
@@ -354,9 +391,30 @@ window.showPaymentModal = function(apartmentId, amount) {
             .then(function(res) { 
                 if (!res.ok) {
                     // Handle HTTP error codes (409 for conflict, etc.)
-                    return res.json().then(function(errorData) {
-                        throw new Error(errorData.error || 'Payment failed');
-                    });
+                    if (res.status === 409) {
+                        // Tenant already has a booking
+                        userHasBooking = true;
+                        return res.json().then(function(errorData) {
+                            throw new Error(errorData.error || 'You already have an active apartment booking.');
+                        }).catch(function(parseError) {
+                            // If error is already an Error object, re-throw it
+                            if (parseError instanceof Error && parseError.message) {
+                                throw parseError;
+                            }
+                            // Otherwise it's a JSON parse error
+                            throw new Error('You already have an active apartment booking.');
+                        });
+                    } else {
+                        // Other errors
+                        return res.json().then(function(errorData) {
+                            throw new Error(errorData.error || 'Payment failed');
+                        }).catch(function(parseError) {
+                            if (parseError instanceof Error && parseError.message) {
+                                throw parseError;
+                            }
+                            throw new Error('Payment initiation failed');
+                        });
+                    }
                 }
                 return res.json(); 
             })
@@ -372,7 +430,21 @@ window.showPaymentModal = function(apartmentId, amount) {
             .catch(function(error) {
                 console.error('Payment error:', error);
                 var errorMessage = error.message || 'Payment failed';
-                document.getElementById('paymentMsg').innerHTML = '<span class="text-danger"><strong>Error:</strong> ' + errorMessage + '</span>';
+                
+                // Check if this is a booking constraint error
+                if (userHasBooking || errorMessage.includes('already have an active apartment booking')) {
+                    document.getElementById('paymentMsg').innerHTML = 
+                        '<div class="alert alert-danger mt-3">' +
+                        '<strong>Booking Constraint:</strong> ' + errorMessage + 
+                        '<br><small>You can only book one apartment at a time. Please contact support to change your booking.</small>' +
+                        '</div>';
+                } else {
+                    // Regular error message
+                    document.getElementById('paymentMsg').innerHTML = 
+                        '<div class="alert alert-danger mt-3">' +
+                        '<strong>Error:</strong> ' + errorMessage + 
+                        '</div>';
+                }
             });
         };
     }, 100);

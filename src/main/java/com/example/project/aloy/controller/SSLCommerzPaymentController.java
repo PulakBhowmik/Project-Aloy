@@ -47,6 +47,54 @@ public class SSLCommerzPaymentController {
         System.out.println("SSLCommerz storeId: " + storeId);
         System.out.println("SSLCommerz storePassword: " + storePassword);
         
+        // CRITICAL: Check if tenant already has a booking
+        Long tenantId = null;
+        if (paymentRequest.get("tenantId") != null) {
+            try {
+                tenantId = Long.parseLong(String.valueOf(paymentRequest.get("tenantId")));
+                System.out.println("[DEBUG CONSTRAINT] Checking if tenant " + tenantId + " already has a booking...");
+                
+                // Find any payment for this tenant (COMPLETED or PENDING with apartment)
+                java.util.List<Payment> tenantPayments = paymentRepository.findByTenantId(tenantId);
+                System.out.println("[DEBUG CONSTRAINT] Found " + tenantPayments.size() + " total payments for tenant " + tenantId);
+                
+                for (Payment p : tenantPayments) {
+                    System.out.println("[DEBUG CONSTRAINT] Payment ID=" + p.getPaymentId() + ", Status=" + p.getStatus() + ", ApartmentId=" + p.getApartmentId() + ", TenantId=" + p.getTenantId());
+                    
+                    // Block if COMPLETED payment exists
+                    if ("COMPLETED".equalsIgnoreCase(p.getStatus()) && p.getApartmentId() != null) {
+                        System.out.println("[WARNING CONSTRAINT] Tenant " + tenantId + " already has a COMPLETED booking for apartment " + p.getApartmentId());
+                        return ResponseEntity.status(409).body(Collections.singletonMap("error", "You already have an active apartment booking. One tenant can only book one apartment at a time."));
+                    }
+                    
+                    // ALSO block if there's a PENDING/CANCELLED payment with an apartment (recently created)
+                    // Check if payment was created in the last 10 minutes (ongoing payment session)
+                    if (p.getApartmentId() != null && p.getCreatedAt() != null && !p.getCreatedAt().isEmpty()) {
+                        try {
+                            java.time.ZonedDateTime createdTime = java.time.ZonedDateTime.parse(p.getCreatedAt(), 
+                                java.time.format.DateTimeFormatter.ISO_DATE_TIME);
+                            java.time.Duration timeSinceCreation = java.time.Duration.between(
+                                createdTime.toInstant(),
+                                java.time.Instant.now()
+                            );
+                            if (timeSinceCreation.toMinutes() < 10 && 
+                                ("PENDING".equalsIgnoreCase(p.getStatus()) || "CANCELLED".equalsIgnoreCase(p.getStatus()))) {
+                                System.out.println("[WARNING CONSTRAINT] Tenant " + tenantId + " has a recent " + p.getStatus() + " payment (created " + timeSinceCreation.toMinutes() + " minutes ago) for apartment " + p.getApartmentId());
+                                return ResponseEntity.status(409).body(Collections.singletonMap("error", "You have a pending payment. Please complete or cancel it before booking another apartment."));
+                            }
+                        } catch (Exception ignored) {
+                            // If date parsing fails, just check based on status
+                            if ("PENDING".equalsIgnoreCase(p.getStatus()) && p.getApartmentId() != null) {
+                                System.out.println("[WARNING CONSTRAINT] Tenant " + tenantId + " has a PENDING payment for apartment " + p.getApartmentId());
+                                return ResponseEntity.status(409).body(Collections.singletonMap("error", "You have a pending payment. Please complete or cancel it before booking another apartment."));
+                            }
+                        }
+                    }
+                }
+                System.out.println("[DEBUG CONSTRAINT] Tenant " + tenantId + " has no active bookings. Proceeding with payment initiation.");
+            } catch (NumberFormatException ignored) {}
+        }
+        
         // Prepare payment data
         Map<String, Object> payload = new HashMap<>();
         
@@ -93,12 +141,12 @@ public class SSLCommerzPaymentController {
                         p.setAmount(BigDecimal.valueOf(amount));
                         p.setPaymentMethod("SSLCommerz");
                         p.setApartmentId(apartmentId);
-                        // Extract tenantId from request
-                        if (paymentRequest.get("tenantId") != null) {
-                            try {
-                                Long tenantId = Long.parseLong(String.valueOf(paymentRequest.get("tenantId")));
-                                p.setTenantId(tenantId);
-                            } catch (NumberFormatException ignored) {}
+                        // Use tenantId already declared and parsed at the beginning
+                        if (tenantId != null) {
+                            p.setTenantId(tenantId);
+                            System.out.println("[DEBUG] Setting tenantId=" + tenantId + " on new payment");
+                        } else {
+                            System.out.println("[WARNING] tenantId is NULL when creating payment!");
                         }
                         p.setStatus("PENDING");
                         p.setCreatedAt(ZonedDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
@@ -108,7 +156,7 @@ public class SSLCommerzPaymentController {
                         paymentRepository.save(saved);
                         debugTranId = tran;
                         payload.put("tran_id", tran);
-                        System.out.println("[DEBUG] Created and saved payment record with ID: " + saved.getPaymentId() + ", transactionId: " + tran);
+                        System.out.println("[DEBUG] Created and saved payment: ID=" + saved.getPaymentId() + ", TranID=" + tran + ", TenantID=" + saved.getTenantId() + ", ApartmentID=" + saved.getApartmentId());
                     }
                 } else {
                     return ResponseEntity.status(404).body("Apartment not found");
@@ -128,12 +176,9 @@ public class SSLCommerzPaymentController {
             p.setAmount(BigDecimal.valueOf(amount));
             p.setPaymentMethod("SSLCommerz");
             p.setTransactionId(debugTranId);
-            // Extract tenantId from request
-            if (paymentRequest.get("tenantId") != null) {
-                try {
-                    Long tenantId = Long.parseLong(String.valueOf(paymentRequest.get("tenantId")));
-                    p.setTenantId(tenantId);
-                } catch (NumberFormatException ignored) {}
+            // Use tenantId already declared and parsed at the beginning
+            if (tenantId != null) {
+                p.setTenantId(tenantId);
             }
             p.setStatus("PENDING");
             p.setCreatedAt(ZonedDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
