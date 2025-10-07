@@ -385,7 +385,6 @@ window.showApartmentDetailsModal = function(apartmentId) {
     fetch('/api/apartments/' + apartmentId)
         .then(function(response) { return response.json(); })
         .then(function(apartment) {
-            // Don't disable buttons - let the payment modal show the error
             var html = '<img src="https://placehold.co/800x400/4f46e5/ffffff?text=' + encodeURIComponent(apartment.title) + '" class="img-fluid mb-3" alt="' + apartment.title + '">' +
                 '<h3>' + apartment.title + '</h3>' +
                 '<p><strong>Description:</strong> ' + (apartment.description || 'No description available') + '</p>' +
@@ -394,15 +393,30 @@ window.showApartmentDetailsModal = function(apartmentId) {
                     '<li class="list-group-item"><strong>District:</strong> ' + (apartment.district || 'N/A') + '</li>' +
                     '<li class="list-group-item"><strong>Available from:</strong> ' + formatDate(apartment.availability) + '</li>' +
                     '<li class="list-group-item"><strong>Suitable for:</strong> ' + (apartment.allowedFor === 'solo' ? 'Solo' : (apartment.allowedFor === 'group' ? 'Group' : (apartment.allowedFor === 'both' ? 'Both' : 'Everyone'))) + '</li>' +
-                    '<li class="list-group-item"><strong>Monthly Rate:</strong> $' + apartment.monthlyRate + '</li>' +
+                    '<li class="list-group-item"><strong>Monthly Rate:</strong> ৳' + apartment.monthlyRate + '</li>' +
                 '</ul>' +
-                '<p><strong>Owner ID:</strong> ' + (apartment.ownerId || 'N/A') + '</p>' +
-                '<div class="d-flex gap-2">' +
+                '<p><strong>Owner ID:</strong> ' + (apartment.ownerId || 'N/A') + '</p>';
+            
+            // Check if user already has a booking - disable buttons if they do
+            if (userHasBooking) {
+                html += '<div class="alert alert-warning">' +
+                    '<strong><i class="bi bi-exclamation-triangle"></i> You already have an active booking!</strong><br>' +
+                    'You can only book one apartment at a time. Please vacate your current apartment first.' +
+                    '</div>' +
+                    '<div class="d-flex gap-2">' +
+                        '<button class="btn btn-secondary" disabled>Book for Myself</button>' +
+                        '<button class="btn btn-secondary" disabled>Book in a Group</button>' +
+                    '</div>';
+            } else {
+                html += '<div class="d-flex gap-2">' +
                     '<button class="btn btn-success" id="bookSoloBtn" data-apartment-id="' + apartment.apartmentId + '" data-amount="' + apartment.monthlyRate + '">Book for Myself</button>' +
                     '<button class="btn btn-info" id="bookGroupBtn" data-apartment-id="' + apartment.apartmentId + '" data-amount="' + apartment.monthlyRate + '">Book in a Group</button>' +
-                '</div>' +
-                '<div id="paymentModalContainer"></div>' +
+                '</div>';
+            }
+            
+            html += '<div id="paymentModalContainer"></div>' +
                 '<div id="groupModalContainer"></div>';
+            
             document.getElementById('apartmentDetailsModalBody').innerHTML = html;
             var modal = new bootstrap.Modal(document.getElementById('apartmentDetailsModal'));
             modal.show();
@@ -446,6 +460,13 @@ ensureModalHandlers();
 // SSLCommerz payment button logic
 window.showPaymentModal = function(apartmentId, amount) {
     console.log('[DEBUG] showPaymentModal called with apartmentId:', apartmentId, 'type:', typeof apartmentId);
+    
+    // CRITICAL: Check if user already has a booking
+    if (userHasBooking) {
+        alert('You already have an active apartment booking! You can only book one apartment at a time. Please vacate your current apartment first.');
+        return;
+    }
+    
     if (!apartmentId || apartmentId === 'null' || apartmentId === 'undefined') {
         alert('Error: Invalid apartment ID. Cannot proceed with payment.');
         return;
@@ -575,6 +596,12 @@ window.showGroupModal = function(apartmentId, amount) {
     const user = JSON.parse(localStorage.getItem('user'));
     if (!user) {
         alert('Please log in to book in a group');
+        return;
+    }
+    
+    // CRITICAL: Check if user already has a booking
+    if (userHasBooking) {
+        alert('You already have an active apartment booking! You can only book one apartment at a time. Please vacate your current apartment first.');
         return;
     }
 
