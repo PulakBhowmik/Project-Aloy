@@ -122,12 +122,16 @@ public class RoommateGroupService {
         member.setTenant(tenant);
         member.setJoinedAt(LocalDateTime.now());
         memberRepository.save(member);
+        memberRepository.flush(); // Ensure the save is committed
 
-        // Check if group is now full (4 members)
+        // Check if group is now full (4 members) - refetch to get updated member list
         group = groupRepository.findById(group.getGroupId()).get();
-        if (group.isFull()) {
+        int currentMemberCount = memberRepository.findByGroup_GroupId(group.getGroupId()).size();
+        
+        if (currentMemberCount >= 4) {
             group.setStatus(GroupStatus.READY);
             groupRepository.save(group);
+            groupRepository.flush(); // Ensure status update is committed
         }
 
         return group;

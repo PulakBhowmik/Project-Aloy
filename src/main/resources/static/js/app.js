@@ -519,9 +519,9 @@ window.showGroupModal = function(apartmentId, amount) {
                     
                     if (isMember) {
                         html += '<button class="btn btn-sm btn-primary me-2" onclick="viewMyGroup(' + group.groupId + ')">View Group</button>' +
-                                '<button class="btn btn-sm btn-danger" onclick="leaveGroup(' + group.groupId + ')">Leave</button>';
+                                '<button class="btn btn-sm btn-danger" onclick="leaveGroup(' + group.groupId + ', ' + apartmentId + ')">Leave</button>';
                     } else {
-                        html += '<button class="btn btn-sm btn-success" onclick="joinExistingGroup(\'' + group.inviteCode + '\')">Join</button>';
+                        html += '<button class="btn btn-sm btn-success" onclick="joinExistingGroup(\'' + group.inviteCode + '\', ' + apartmentId + ')">Join</button>';
                     }
                     
                     html += '</div></div></div></div>';
@@ -610,7 +610,7 @@ window.createNewGroup = function(apartmentId) {
 };
 
 // Join an existing group
-window.joinExistingGroup = function(inviteCode) {
+window.joinExistingGroup = function(inviteCode, apartmentId) {
     const user = JSON.parse(localStorage.getItem('user'));
     
     if (!user) {
@@ -630,10 +630,16 @@ window.joinExistingGroup = function(inviteCode) {
             document.getElementById('groupMsg').innerHTML = 
                 '<div class="alert alert-success"><strong>✓ ' + data.message + '</strong></div>';
             
-            // Refresh and show group details with updated member count and status
+            // Refresh the entire group modal to show updated status and member count
+            // This ensures the Pay Now button appears if the 4th member just joined
             setTimeout(() => {
-                viewMyGroup(data.group.groupId);
-            }, 500);
+                if (apartmentId) {
+                    showGroupModal(apartmentId);
+                } else {
+                    // Fallback: just show group details
+                    viewMyGroup(data.group.groupId);
+                }
+            }, 1000);
         } else {
             document.getElementById('groupMsg').innerHTML = 
                 '<div class="alert alert-danger"><strong>✗ ' + data.message + '</strong></div>';
@@ -684,7 +690,7 @@ window.viewMyGroup = function(groupId) {
             
             html += '<hr><div class="d-flex gap-2">' +
                 '<button class="btn btn-secondary flex-fill" onclick="showGroupModal(' + group.apartment.apartmentId + ')">« Back to Groups</button>' +
-                '<button class="btn btn-danger flex-fill" onclick="leaveGroup(' + groupId + ')">Leave Group</button>' +
+                '<button class="btn btn-danger flex-fill" onclick="leaveGroup(' + groupId + ', ' + group.apartment.apartmentId + ')">Leave Group</button>' +
                 '</div>';
             html += '</div></div>';
             
@@ -698,7 +704,7 @@ window.viewMyGroup = function(groupId) {
 };
 
 // Leave group
-window.leaveGroup = function(groupId) {
+window.leaveGroup = function(groupId, apartmentId) {
     if (!confirm('Are you sure you want to leave this group?')) return;
     
     const user = JSON.parse(localStorage.getItem('user'));
@@ -713,13 +719,23 @@ window.leaveGroup = function(groupId) {
         if (data.success) {
             document.getElementById('groupMsg').innerHTML = 
                 '<div class="alert alert-success">' + data.message + '</div>';
+            // Refresh the group list to show updated member count
             setTimeout(() => {
-                bootstrap.Modal.getInstance(document.getElementById('groupModal')).hide();
-            }, 1500);
+                if (apartmentId) {
+                    showGroupModal(apartmentId);
+                } else {
+                    // If no apartmentId provided, just close modal
+                    bootstrap.Modal.getInstance(document.getElementById('groupModal')).hide();
+                }
+            }, 1000);
         } else {
             document.getElementById('groupMsg').innerHTML = 
                 '<div class="alert alert-danger">' + data.message + '</div>';
         }
+    })
+    .catch(error => {
+        document.getElementById('groupMsg').innerHTML = 
+            '<div class="alert alert-danger">Error: ' + error.message + '</div>';
     });
 };
 
