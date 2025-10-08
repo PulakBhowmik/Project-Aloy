@@ -2,6 +2,8 @@ package com.example.project.aloy.service;
 
 import com.example.project.aloy.model.*;
 import com.example.project.aloy.repository.*;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +15,9 @@ import java.util.Random;
 
 @Service
 public class RoommateGroupService {
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Autowired
     private RoommateGroupRepository groupRepository;
@@ -142,6 +147,7 @@ public class RoommateGroupService {
      */
     @Transactional
     public void leaveGroup(Long groupId, Long tenantId) {
+        // Fetch group with fresh data
         RoommateGroup group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new RuntimeException("Group not found"));
 
@@ -153,23 +159,42 @@ public class RoommateGroupService {
         RoommateGroupMember member = memberRepository.findByGroup_GroupIdAndTenant_UserId(groupId, tenantId)
                 .orElseThrow(() -> new RuntimeException("You are not a member of this group"));
 
-        // Remove member
+        // Remove member from group's member list (for JPA cascade)
+        group.getMembers().remove(member);
+        
+        // Delete the member entity
         memberRepository.delete(member);
-        memberRepository.flush(); // Force immediate deletion
+        
+        // Save group changes and flush to database
+        groupRepository.save(group);
+        groupRepository.flush();
+        
+        // Clear EntityManager to force fresh queries
+        entityManager.clear();
 
-        // Check remaining members - query database directly to avoid cache
-        int remainingMembers = memberRepository.findByGroup_GroupId(groupId).size();
+        // Count remaining members by querying database directly
+        List<RoommateGroupMember> remainingMembersList = memberRepository.findByGroup_GroupId(groupId);
+        int remainingMembers = remainingMembersList.size();
 
         if (remainingMembers == 0) {
-            // No members left, delete group
-            groupRepository.delete(group);
+            // No members left, delete the group entirely
+            groupRepository.deleteById(groupId);
             groupRepository.flush();
-        } else if (group.getStatus() == GroupStatus.READY && remainingMembers < 4) {
-            // Group was ready but now not full, set back to forming
-            group.setStatus(GroupStatus.FORMING);
-            groupRepository.save(group);
-            groupRepository.flush();
+        } else {
+            // Re-fetch group for status update
+            RoommateGroup freshGroup = groupRepository.findById(groupId)
+                    .orElse(null);
+            
+            if (freshGroup != null && freshGroup.getStatus() == GroupStatus.READY && remainingMembers < 4) {
+                // Group was ready but now not full, set back to forming
+                freshGroup.setStatus(GroupStatus.FORMING);
+                groupRepository.save(freshGroup);
+                groupRepository.flush();
+            }
         }
+        
+        // Final cache clear to ensure next API call gets fresh data
+        entityManager.clear();
     }
 
     /**
