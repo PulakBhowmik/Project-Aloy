@@ -49,6 +49,9 @@ function checkTenantBookingStatus() {
         .catch(error => {
             console.error('[ERROR] Failed to check tenant booking status:', error);
         });
+    
+    // Also check if tenant is in a roommate group
+    checkTenantGroupStatus();
 }
 
 // Show vacate button for tenants with active bookings
@@ -167,6 +170,161 @@ window.showVacateModal = function() {
                     <strong>Error:</strong> Failed to process vacate request
                 </div>`;
         });
+    });
+}
+
+// Check tenant's roommate group status
+function checkTenantGroupStatus() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user || !user.userId || user.role.toUpperCase() !== 'TENANT') {
+        return;
+    }
+
+    fetch(`/api/groups/tenant/${user.userId}/status`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.inGroup) {
+                console.log('[INFO] User is in a roommate group:', data);
+                showGroupStatusBox(data);
+            } else {
+                console.log('[INFO] User is not in any active group');
+            }
+        })
+        .catch(error => {
+            console.error('[ERROR] Failed to check tenant group status:', error);
+        });
+}
+
+// Show group status box for tenants in a group
+function showGroupStatusBox(groupData) {
+    const container = document.getElementById('vacateButtonContainer');
+    if (!container) return;
+    
+    const statusColor = groupData.status === 'READY' ? 'success' : 'info';
+    const statusIcon = groupData.status === 'READY' ? 'check-circle-fill' : 'hourglass-split';
+    const memberProgressPercent = (groupData.memberCount / groupData.maxMembers) * 100;
+    
+    const html = `
+        <div class="card mt-4 border-${statusColor}">
+            <div class="card-header bg-${statusColor} text-white">
+                <h5><i class="bi bi-people-fill"></i> Your Roommate Group</h5>
+            </div>
+            <div class="card-body">
+                <h6 class="mb-3">${groupData.apartmentTitle}</h6>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <strong>Group Status:</strong>
+                        <span class="badge bg-${statusColor}">
+                            <i class="bi bi-${statusIcon}"></i> ${groupData.status}
+                        </span>
+                    </div>
+                    <small class="text-muted">
+                        ${groupData.status === 'READY' ? 'Your group is ready to book!' : 'Waiting for more members...'}
+                    </small>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <strong>Members:</strong>
+                        <span>${groupData.memberCount}/${groupData.maxMembers}</span>
+                    </div>
+                    <div class="progress mb-2" style="height: 20px;">
+                        <div class="progress-bar bg-${statusColor}" role="progressbar" 
+                             style="width: ${memberProgressPercent}%;" 
+                             aria-valuenow="${groupData.memberCount}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="${groupData.maxMembers}">
+                            ${groupData.memberCount}/${groupData.maxMembers}
+                        </div>
+                    </div>
+                    <small class="text-muted">
+                        ${groupData.memberNames.join(', ')}
+                    </small>
+                </div>
+                
+                <div class="mb-3">
+                    <strong>Share with Friends:</strong>
+                    <div class="input-group input-group-sm mt-2">
+                        <input type="text" class="form-control" 
+                               id="groupInviteLink_${groupData.groupId}" 
+                               value="${window.location.origin}/join-group?code=${groupData.inviteCode}" 
+                               readonly>
+                        <button class="btn btn-outline-secondary" 
+                                onclick="copyGroupInviteLink(${groupData.groupId}, '${groupData.inviteCode}')">
+                            <i class="bi bi-clipboard"></i> Copy Link
+                        </button>
+                    </div>
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i> Anyone who clicks this link will be able to join your group
+                    </small>
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" 
+                            onclick="showApartmentDetailsModal(${groupData.apartmentId})">
+                        <i class="bi bi-eye"></i> View Apartment
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" 
+                            onclick="confirmLeaveGroup(${groupData.groupId})">
+                        <i class="bi bi-box-arrow-right"></i> Leave Group
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Insert before or after existing content
+    if (container.innerHTML.trim() === '') {
+        container.innerHTML = html;
+    } else {
+        container.innerHTML += html;
+    }
+}
+
+// Copy group invite link to clipboard
+window.copyGroupInviteLink = function(groupId, inviteCode) {
+    const link = window.location.origin + '/join-group?code=' + inviteCode;
+    navigator.clipboard.writeText(link).then(() => {
+        alert(`Invite link copied to clipboard!\n\nShare this link with your friends to join the group.`);
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+        // Fallback: select the text
+        const input = document.getElementById('groupInviteLink_' + groupId);
+        if (input) {
+            input.select();
+            alert('Link selected. Press Ctrl+C to copy.');
+        } else {
+            alert('Failed to copy link. Link: ' + link);
+        }
+    });
+}
+
+// Confirm leave group
+window.confirmLeaveGroup = function(groupId) {
+    if (!confirm('Are you sure you want to leave this group? This action cannot be undone.')) {
+        return;
+    }
+    
+    const user = JSON.parse(localStorage.getItem('user'));
+    
+    fetch(`/api/groups/${groupId}/leave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: user.userId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error leaving group:', error);
+        alert('Failed to leave group');
     });
 }
 
@@ -737,16 +895,22 @@ window.createNewGroup = function(apartmentId) {
             document.getElementById('groupContent').innerHTML = 
                 '<div class="alert alert-success">' +
                     '<h5>✓ Group Created Successfully!</h5>' +
-                    '<p>You are the first member (1/4). Share this invite code with 3 friends:</p>' +
+                    '<p>You are the first member (1/4). Your group status will be shown on the homepage.</p>' +
                     '<div class="card bg-light p-3 mb-3">' +
                         '<h3 class="text-center mb-0"><code>' + inviteCode + '</code></h3>' +
+                        '<p class="text-center mb-0 mt-2"><small>Share this invite code with 3 friends</small></p>' +
                     '</div>' +
                     '<p><strong>Share this link:</strong></p>' +
                     '<input type="text" class="form-control mb-2" value="' + inviteLink + '" id="inviteLinkInput" readonly>' +
                     '<button class="btn btn-info" onclick="copyInviteLink()">Copy Link</button>' +
                     '<hr>' +
-                    '<button class="btn btn-primary mt-2" onclick="viewMyGroup(' + data.group.groupId + ')">View My Group</button>' +
+                    '<p><small>Reloading page to show your group status...</small></p>' +
                 '</div>';
+            
+            // Reload the page after a short delay to show the group status box
+            setTimeout(() => {
+                location.reload();
+            }, 2500);
         } else {
             document.getElementById('groupMsg').innerHTML = '<div class="alert alert-danger">' + data.message + '</div>';
         }
@@ -775,18 +939,12 @@ window.joinExistingGroup = function(inviteCode, apartmentId) {
         if (data.success) {
             // Show success message
             document.getElementById('groupMsg').innerHTML = 
-                '<div class="alert alert-success"><strong>✓ ' + data.message + '</strong></div>';
+                '<div class="alert alert-success"><strong>✓ ' + data.message + '</strong><br><small>Reloading page to show your group status...</small></div>';
             
-            // Refresh the entire group modal to show updated status and member count
-            // This ensures the Pay Now button appears if the 4th member just joined
+            // Reload the page after a short delay to show the group status box
             setTimeout(() => {
-                if (apartmentId) {
-                    showGroupModal(apartmentId);
-                } else {
-                    // Fallback: just show group details
-                    viewMyGroup(data.group.groupId);
-                }
-            }, 1000);
+                location.reload();
+            }, 1500);
         } else {
             document.getElementById('groupMsg').innerHTML = 
                 '<div class="alert alert-danger"><strong>✗ ' + data.message + '</strong></div>';

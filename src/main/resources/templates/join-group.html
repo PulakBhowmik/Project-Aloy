@@ -135,12 +135,17 @@
                         '<div class="alert alert-success">' +
                             '<h5>✓ Successfully Joined Group!</h5>' +
                             '<p>' + data.message + '</p>' +
-                            '<a href="/" class="btn btn-primary">Go to Home Page</a>' +
+                            '<p><small>Redirecting to homepage in 2 seconds...</small></p>' +
                         '</div>';
                     
                     // Hide join button
                     const joinBtn = document.querySelector('button');
                     if (joinBtn) joinBtn.style.display = 'none';
+                    
+                    // Redirect to homepage after 2 seconds
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 2000);
                 } else {
                     document.getElementById('message').innerHTML = 
                         '<div class="alert alert-danger">' + data.message + '</div>';

@@ -203,4 +203,19 @@ public class RoommateGroupController {
                     .body(Map.of("error", e.getMessage()));
         }
     }
+
+    /**
+     * Get current tenant's active group status
+     * GET /api/groups/tenant/{tenantId}/status
+     */
+    @GetMapping("/tenant/{tenantId}/status")
+    public ResponseEntity<?> getTenantGroupStatus(@PathVariable Long tenantId) {
+        try {
+            Map<String, Object> status = groupService.getTenantGroupStatus(tenantId);
+            return ResponseEntity.ok(status);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
 }

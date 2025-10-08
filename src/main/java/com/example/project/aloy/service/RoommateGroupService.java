@@ -280,6 +280,49 @@ public class RoommateGroupService {
     }
 
     /**
+     * Get tenant's current group status (if in any active group)
+     */
+    public java.util.Map<String, Object> getTenantGroupStatus(Long tenantId) {
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        
+        // Check if tenant is in any active group (FORMING or READY)
+        List<RoommateGroupMember> memberships = memberRepository.findActiveMembershipsByTenantId(tenantId);
+        
+        if (memberships.isEmpty()) {
+            response.put("inGroup", false);
+            return response;
+        }
+        
+        // Get the group details
+        RoommateGroupMember membership = memberships.get(0);
+        RoommateGroup group = membership.getGroup();
+        
+        // Count members
+        int memberCount = memberRepository.findByGroup_GroupId(group.getGroupId()).size();
+        
+        response.put("inGroup", true);
+        response.put("groupId", group.getGroupId());
+        response.put("apartmentTitle", group.getApartment().getTitle());
+        response.put("apartmentId", group.getApartment().getApartmentId());
+        response.put("inviteCode", group.getInviteCode());
+        response.put("status", group.getStatus().toString());
+        response.put("memberCount", memberCount);
+        response.put("maxMembers", 4);
+        response.put("isFull", memberCount >= 4);
+        response.put("isCreator", group.getCreatorId().equals(tenantId));
+        response.put("createdAt", group.getCreatedAt());
+        
+        // Get member names
+        List<RoommateGroupMember> allMembers = memberRepository.findByGroup_GroupId(group.getGroupId());
+        List<String> memberNames = allMembers.stream()
+                .map(m -> m.getTenant().getName())
+                .toList();
+        response.put("memberNames", memberNames);
+        
+        return response;
+    }
+
+    /**
      * Generate a unique 6-character invite code
      */
     private String generateInviteCode() {
