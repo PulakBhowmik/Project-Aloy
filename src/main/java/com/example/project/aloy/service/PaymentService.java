@@ -50,9 +50,9 @@ public class PaymentService {
 
                 if (!apt.isBooked()) {
                     apt.setBooked(true);
-                    apt.setStatus("RENTED");
+                    apt.setStatus("BOOKED");
                     apartmentRepository.save(apt);
-                    System.out.println("[SUCCESS Service] Apartment " + aptId + " successfully marked as BOOKED and RENTED");
+                    System.out.println("[SUCCESS Service] Apartment " + aptId + " successfully marked as BOOKED");
                 } else {
                     System.out.println("[INFO Service] Apartment " + aptId + " is already booked");
                 }
@@ -72,14 +72,16 @@ public class PaymentService {
     public void vacateApartment(Long tenantId, Long apartmentId, String vacateDate) {
         System.out.println("[DEBUG Service] Tenant " + tenantId + " vacating apartment " + apartmentId + " on " + vacateDate);
         
-        // Find the payment record for this tenant and apartment
-        Optional<Payment> paymentOpt = paymentRepository.findByTenantIdAndApartmentId(tenantId, apartmentId);
+        // Find the most recent COMPLETED payment record for this tenant and apartment
+        java.util.List<Payment> payments = paymentRepository.findCompletedPaymentsByTenantAndApartment(tenantId, apartmentId);
         
-        if (paymentOpt.isEmpty()) {
-            throw new RuntimeException("No booking found for this tenant and apartment");
+        if (payments.isEmpty()) {
+            throw new RuntimeException("No completed booking found for this tenant and apartment");
         }
         
-        Payment payment = paymentOpt.get();
+        // Get the most recent payment (first in list due to ORDER BY DESC)
+        Payment payment = payments.get(0);
+        System.out.println("[DEBUG Service] Found payment ID: " + payment.getPaymentId() + " with status: " + payment.getStatus());
         
         // Set the vacate date
         payment.setVacateDate(vacateDate);

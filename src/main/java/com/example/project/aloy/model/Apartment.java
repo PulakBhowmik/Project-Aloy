@@ -30,7 +30,7 @@ public class Apartment {
     // 'solo', 'group', or 'both'
     private String allowedFor;
 
-    // AVAILABLE or RENTED
+    // AVAILABLE or BOOKED (standardized statuses)
     private String status = "AVAILABLE";
 
     private LocalDate availability;

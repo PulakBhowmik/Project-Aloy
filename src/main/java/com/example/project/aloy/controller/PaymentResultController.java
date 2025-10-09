@@ -199,9 +199,9 @@ public class PaymentResultController {
                     if (lockedAptOpt.isPresent()) {
                         Apartment apt = lockedAptOpt.get();
                         if (!apt.isBooked()) {
-                            System.out.println("[DEBUG] Marking apartment " + aptId + " as booked and RENTED (solo booking)");
+                            System.out.println("[DEBUG] Marking apartment " + aptId + " as booked (solo booking)");
                             apt.setBooked(true);
-                            apt.setStatus("RENTED");
+                            apt.setStatus("BOOKED");
                             apartmentRepository.save(apt);
                             System.out.println("[DEBUG] Apartment " + aptId + " successfully marked as booked");
                         } else {

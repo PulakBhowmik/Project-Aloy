@@ -122,8 +122,8 @@ public class SSLCommerzPaymentController {
                 java.util.Optional<com.example.project.aloy.model.Apartment> locked = apartmentRepository.findByIdForUpdate(apartmentId);
                 if (locked.isPresent()) {
                     com.example.project.aloy.model.Apartment ap = locked.get();
-                    // Check if apartment is already booked or status is RENTED
-                    if (ap.isBooked() || "RENTED".equalsIgnoreCase(ap.getStatus())) {
+                    // Check if apartment is already booked
+                    if (ap.isBooked() || "BOOKED".equalsIgnoreCase(ap.getStatus())) {
                         System.out.println("[WARNING] Apartment " + apartmentId + " is already booked (booked=" + ap.isBooked() + ", status=" + ap.getStatus() + ")");
                         return ResponseEntity.status(409).body(Collections.singletonMap("error", "This apartment is already booked. Please choose another one."));
                     }
@@ -383,7 +383,7 @@ public class SSLCommerzPaymentController {
             java.util.Optional<com.example.project.aloy.model.Apartment> locked = apartmentRepository.findByIdForUpdate(apartmentId);
             if (locked.isPresent()) {
                 com.example.project.aloy.model.Apartment ap = locked.get();
-                if (ap.isBooked() || "RENTED".equalsIgnoreCase(ap.getStatus())) {
+                if (ap.isBooked() || "BOOKED".equalsIgnoreCase(ap.getStatus())) {
                     System.out.println("[WARNING GROUP] Apartment " + apartmentId + " is already booked");
                     return ResponseEntity.status(409).body(Collections.singletonMap("error", "This apartment is already booked."));
                 }

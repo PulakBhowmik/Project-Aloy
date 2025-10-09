@@ -410,8 +410,10 @@ function displayApartments(apartments) {
 
     let html = '<div class="row">';
     apartments.forEach(apartment => {
-        // Check if apartment is booked
-        const isBooked = apartment.booked || apartment.status === 'RENTED';
+        // Check if apartment is booked (standardized: only BOOKED or AVAILABLE)
+        const statusUpper = (apartment.status || '').toUpperCase();
+        const isBooked = apartment.booked === true || apartment.booked === 1 || 
+                        statusUpper === 'BOOKED';
         const statusBadge = isBooked ? '<span class="badge bg-danger">BOOKED</span>' : '<span class="badge bg-success">AVAILABLE</span>';
         
         html += `

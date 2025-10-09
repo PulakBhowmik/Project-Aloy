@@ -230,7 +230,7 @@ public class RoommateGroupService {
 
         // Mark apartment as booked
         apartment.setBooked(true);
-        apartment.setStatus("RENTED");
+        apartment.setStatus("BOOKED");
         apartmentRepository.save(apartment);
 
         // Update group status
