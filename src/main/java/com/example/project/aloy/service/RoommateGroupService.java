@@ -78,6 +78,12 @@ public class RoommateGroupService {
         member.setTenant(creator);
         member.setJoinedAt(LocalDateTime.now());
         memberRepository.save(member);
+        memberRepository.flush();
+
+        // Clear entity manager and re-fetch to get updated members list
+        entityManager.clear();
+        group = groupRepository.findById(group.getGroupId())
+                .orElseThrow(() -> new RuntimeException("Group not found after creation"));
 
         return group;
     }
@@ -129,14 +135,25 @@ public class RoommateGroupService {
         memberRepository.save(member);
         memberRepository.flush(); // Ensure the save is committed
 
-        // Check if group is now full (4 members) - refetch to get updated member list
-        group = groupRepository.findById(group.getGroupId()).get();
+        // Clear entity manager to force fresh data
+        entityManager.clear();
+
+        // Re-fetch group with updated members
+        group = groupRepository.findById(group.getGroupId())
+                .orElseThrow(() -> new RuntimeException("Group not found after join"));
+        
+        // Count members by querying database directly
         int currentMemberCount = memberRepository.findByGroup_GroupId(group.getGroupId()).size();
         
         if (currentMemberCount >= 4) {
             group.setStatus(GroupStatus.READY);
             groupRepository.save(group);
             groupRepository.flush(); // Ensure status update is committed
+            
+            // Clear and re-fetch one more time to ensure members list is up to date
+            entityManager.clear();
+            group = groupRepository.findById(group.getGroupId())
+                    .orElseThrow(() -> new RuntimeException("Group not found"));
         }
 
         return group;

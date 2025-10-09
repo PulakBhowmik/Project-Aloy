@@ -17,7 +17,18 @@
     document.getElementById('downloadReceiptBtn').onclick = function() {
         var tranId = document.getElementById('tranId').textContent.trim();
         if(tranId) {
-            window.location.href = '/payment-success/download?tran_id=' + encodeURIComponent(tranId);
+            // Create a temporary link to download the receipt
+            var downloadLink = document.createElement('a');
+            downloadLink.href = '/payment-success/download?tran_id=' + encodeURIComponent(tranId);
+            downloadLink.download = 'receipt_' + tranId + '.pdf';
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            
+            // After 2 seconds, redirect to home page to show updated apartment status
+            setTimeout(function() {
+                window.location.href = '/';
+            }, 2000);
         } else {
             alert('Transaction ID not found.');
         }

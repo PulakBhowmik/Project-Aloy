@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Collections;
+import java.util.List;
 import java.math.BigDecimal;
 
 
@@ -61,18 +62,9 @@ public class SSLCommerzPaymentController {
                 java.util.List<Payment> tenantPayments = paymentRepository.findByTenantId(tenantId);
                 System.out.println("[DEBUG CONSTRAINT] Found " + tenantPayments.size() + " total payments for tenant " + tenantId);
                 
+                // First pass: Auto-cleanup old PENDING payments (>30 minutes) to prevent blocking
                 for (Payment p : tenantPayments) {
-                    System.out.println("[DEBUG CONSTRAINT] Payment ID=" + p.getPaymentId() + ", Status=" + p.getStatus() + ", ApartmentId=" + p.getApartmentId() + ", TenantId=" + p.getTenantId());
-                    
-                    // Block if COMPLETED payment exists
-                    if ("COMPLETED".equalsIgnoreCase(p.getStatus()) && p.getApartmentId() != null) {
-                        System.out.println("[WARNING CONSTRAINT] Tenant " + tenantId + " already has a COMPLETED booking for apartment " + p.getApartmentId());
-                        return ResponseEntity.status(409).body(Collections.singletonMap("error", "You already have an active apartment booking. One tenant can only book one apartment at a time."));
-                    }
-                    
-                    // ALSO block if there's a PENDING/CANCELLED payment with an apartment (recently created)
-                    // Check if payment was created in the last 10 minutes (ongoing payment session)
-                    if (p.getApartmentId() != null && p.getCreatedAt() != null && !p.getCreatedAt().isEmpty()) {
+                    if ("PENDING".equalsIgnoreCase(p.getStatus()) && p.getCreatedAt() != null && !p.getCreatedAt().isEmpty()) {
                         try {
                             java.time.ZonedDateTime createdTime = java.time.ZonedDateTime.parse(p.getCreatedAt(), 
                                 java.time.format.DateTimeFormatter.ISO_DATE_TIME);
@@ -80,18 +72,44 @@ public class SSLCommerzPaymentController {
                                 createdTime.toInstant(),
                                 java.time.Instant.now()
                             );
-                            if (timeSinceCreation.toMinutes() < 10 && 
-                                ("PENDING".equalsIgnoreCase(p.getStatus()) || "CANCELLED".equalsIgnoreCase(p.getStatus()))) {
-                                System.out.println("[WARNING CONSTRAINT] Tenant " + tenantId + " has a recent " + p.getStatus() + " payment (created " + timeSinceCreation.toMinutes() + " minutes ago) for apartment " + p.getApartmentId());
+                            if (timeSinceCreation.toMinutes() > 30) {
+                                System.out.println("[AUTO-CLEANUP] Marking old PENDING payment " + p.getPaymentId() + " as CANCELLED (age: " + timeSinceCreation.toMinutes() + " minutes)");
+                                p.setStatus("CANCELLED");
+                                paymentRepository.save(p);
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+                
+                // Second pass: Check for active bookings
+                for (Payment p : tenantPayments) {
+                    System.out.println("[DEBUG CONSTRAINT] Payment ID=" + p.getPaymentId() + ", Status=" + p.getStatus() + ", ApartmentId=" + p.getApartmentId() + ", TenantId=" + p.getTenantId() + ", VacateDate=" + p.getVacateDate());
+                    
+                    // Block if COMPLETED payment exists AND hasn't been vacated
+                    if ("COMPLETED".equalsIgnoreCase(p.getStatus()) && 
+                        p.getApartmentId() != null && 
+                        p.getVacateDate() == null) {
+                        System.out.println("[WARNING CONSTRAINT] Tenant " + tenantId + " already has a COMPLETED booking for apartment " + p.getApartmentId());
+                        return ResponseEntity.status(409).body(Collections.singletonMap("error", "You already have an active apartment booking. One tenant can only book one apartment at a time."));
+                    }
+                    
+                    // Block if there's a recent PENDING payment (< 30 minutes) to prevent double-booking during active session
+                    if (p.getApartmentId() != null && 
+                        "PENDING".equalsIgnoreCase(p.getStatus()) && 
+                        p.getCreatedAt() != null && 
+                        !p.getCreatedAt().isEmpty()) {
+                        try {
+                            java.time.ZonedDateTime createdTime = java.time.ZonedDateTime.parse(p.getCreatedAt(), 
+                                java.time.format.DateTimeFormatter.ISO_DATE_TIME);
+                            java.time.Duration timeSinceCreation = java.time.Duration.between(
+                                createdTime.toInstant(),
+                                java.time.Instant.now()
+                            );
+                            if (timeSinceCreation.toMinutes() < 30) {
+                                System.out.println("[WARNING CONSTRAINT] Tenant " + tenantId + " has a recent PENDING payment (created " + timeSinceCreation.toMinutes() + " minutes ago) for apartment " + p.getApartmentId());
                                 return ResponseEntity.status(409).body(Collections.singletonMap("error", "You have a pending payment. Please complete or cancel it before booking another apartment."));
                             }
-                        } catch (Exception ignored) {
-                            // If date parsing fails, just check based on status
-                            if ("PENDING".equalsIgnoreCase(p.getStatus()) && p.getApartmentId() != null) {
-                                System.out.println("[WARNING CONSTRAINT] Tenant " + tenantId + " has a PENDING payment for apartment " + p.getApartmentId());
-                                return ResponseEntity.status(409).body(Collections.singletonMap("error", "You have a pending payment. Please complete or cancel it before booking another apartment."));
-                            }
-                        }
+                        } catch (Exception ignored) {}
                     }
                 }
                 System.out.println("[DEBUG CONSTRAINT] Tenant " + tenantId + " has no active bookings. Proceeding with payment initiation.");
@@ -128,8 +146,20 @@ public class SSLCommerzPaymentController {
                         return ResponseEntity.status(409).body(Collections.singletonMap("error", "This apartment is already booked. Please choose another one."));
                     }
 
-                    // Try to find existing payment for this apartment
-                    Payment existing = paymentRepository.findByApartmentId(apartmentId).orElse(null);
+                    // Try to find existing payment for this apartment (use findAllByApartmentId to avoid NonUniqueResultException)
+                    List<Payment> allPayments = paymentRepository.findAllByApartmentId(apartmentId);
+                    Payment existing = null;
+                    // First check if there's a COMPLETED payment (apartment should already be blocked)
+                    for (Payment p : allPayments) {
+                        if ("COMPLETED".equalsIgnoreCase(p.getStatus())) {
+                            existing = p;
+                            break;
+                        }
+                    }
+                    // If no COMPLETED, look for most recent PENDING to reuse
+                    if (existing == null && !allPayments.isEmpty()) {
+                        existing = allPayments.get(allPayments.size() - 1); // Get most recent
+                    }
                     if (existing != null) {
                         if ("COMPLETED".equalsIgnoreCase(existing.getStatus())) {
                             System.out.println("[WARNING] Apartment " + apartmentId + " already has a completed payment (ID: " + existing.getPaymentId() + ")");

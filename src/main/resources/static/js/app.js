@@ -200,6 +200,12 @@ function showGroupStatusBox(groupData) {
     const container = document.getElementById('vacateButtonContainer');
     if (!container) return;
     
+    // Don't show the green sidebar if group is already BOOKED
+    if (groupData.status === 'BOOKED') {
+        console.log('[INFO] Group is already booked, hiding invitation sidebar');
+        return;
+    }
+    
     const statusColor = groupData.status === 'READY' ? 'success' : 'info';
     const statusIcon = groupData.status === 'READY' ? 'check-circle-fill' : 'hourglass-split';
     const memberProgressPercent = (groupData.memberCount / groupData.maxMembers) * 100;

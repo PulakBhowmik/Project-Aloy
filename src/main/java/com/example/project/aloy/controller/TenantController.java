@@ -33,17 +33,25 @@ public class TenantController {
             // Find all payments for this tenant
             List<Payment> payments = paymentRepository.findByTenantId(userId);
             
-            // Look for a COMPLETED payment (active booking)
+            // Look for a COMPLETED payment (active booking) that hasn't been vacated
             for (Payment payment : payments) {
-                if ("COMPLETED".equalsIgnoreCase(payment.getStatus()) && payment.getApartmentId() != null) {
-                    // Found active booking
+                if ("COMPLETED".equalsIgnoreCase(payment.getStatus()) && 
+                    payment.getApartmentId() != null && 
+                    payment.getVacateDate() == null) {  // Only non-vacated bookings
+                    
+                    // Found active booking - fetch apartment details
                     Apartment apartment = apartmentRepository.findById(payment.getApartmentId()).orElse(null);
+                    
+                    if (apartment == null) {
+                        System.out.println("[WARN] Apartment with ID " + payment.getApartmentId() + " not found for payment " + payment.getPaymentId());
+                        continue; // Skip this payment and check next one
+                    }
                     
                     Map<String, Object> response = new HashMap<>();
                     response.put("hasBooking", true);
                     response.put("apartmentId", payment.getApartmentId());
-                    response.put("apartmentTitle", apartment != null ? apartment.getTitle() : "Unknown");
-                    response.put("monthlyRent", apartment != null ? apartment.getMonthlyRate() : 0);
+                    response.put("apartmentTitle", apartment.getTitle());
+                    response.put("monthlyRent", apartment.getMonthlyRate());
                     response.put("transactionId", payment.getTransactionId());
                     response.put("paymentDate", payment.getCreatedAt());
                     
