@@ -4,10 +4,7 @@ let currentUser = null;
 let ownerApartments = [];
 
 // Initialize on page load
-document.addEven                html += `<td><strong>${district.district}</strong></td>`;
-                html += `<td><span class="badge bg-primary">${district.count}</span></td>`;
-                html += `<td><strong class="text-success">৳${district.revenue.toFixed(2)}</strong></td>`;
-                html += `<td>`;tener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function() {
     // Check if user is logged in and is an owner
     currentUser = JSON.parse(localStorage.getItem('user'));
     
@@ -227,7 +224,7 @@ function loadTopApartments() {
                 const rankBadge = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}`;
                 const statusBadge = apt.status === 'AVAILABLE' ? 
                     '<span class="badge bg-success">Available</span>' : 
-                    '<span class="badge bg-warning">Rented</span>';
+                    '<span class="badge bg-warning">Booked</span>';
                     
                 html += '<tr>';
                 html += `<td><h4>${rankBadge}</h4></td>`;
@@ -298,8 +295,8 @@ function renderApartments(apartments) {
     container.innerHTML = apartments.map(apartment => {
         const statusBadge = apartment.status === 'AVAILABLE' 
             ? '<span class="badge bg-success">Available</span>'
-            : apartment.status === 'RENTED'
-            ? '<span class="badge bg-warning text-dark">Rented</span>'
+            : apartment.status === 'BOOKED'
+            ? '<span class="badge bg-warning text-dark">Booked</span>'
             : '<span class="badge bg-secondary">Unknown</span>';
             
         const bookedBadge = apartment.booked 

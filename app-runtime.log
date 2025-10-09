@@ -233,3 +233,16 @@ Hibernate: select u1_0.user_id,u1_0.district,u1_0.dob,u1_0.email,u1_0.gender,u1_
 Hibernate: select a1_0.apartment_id,a1_0.address,a1_0.allowed_for,a1_0.availability,a1_0.booked,a1_0.description,a1_0.district,a1_0.house_no,a1_0.monthly_rent,a1_0.owner_id,a1_0.status,a1_0.street,a1_0.title from apartments a1_0
 Hibernate: select a1_0.apartment_id,a1_0.address,a1_0.allowed_for,a1_0.availability,a1_0.booked,a1_0.description,a1_0.district,a1_0.house_no,a1_0.monthly_rent,a1_0.owner_id,a1_0.status,a1_0.street,a1_0.title from apartments a1_0
 Hibernate: select p1_0.payment_id,p1_0.amount,p1_0.apartment_id,p1_0.created_at,p1_0.payment_method,p1_0.status,p1_0.tenant_id,p1_0.transaction_id,p1_0.vacate_date from payment p1_0 where p1_0.tenant_id=?
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  11:37 min
+[INFO] Finished at: 2025-10-09T12:27:00+06:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.springframework.boot:spring-boot-maven-plugin:3.1.5:run (default-cli) on project apartment-rental-system: Process terminated with exit code: 1 -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException
