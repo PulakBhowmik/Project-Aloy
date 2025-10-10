@@ -59,6 +59,10 @@ function showVacateButton(bookingData) {
     const container = document.getElementById('vacateButtonContainer');
     if (!container) return;
     
+    // Show yellow box for ANY active booking (apartment.booked = true)
+    // If hasBooking is true from API, the apartment is BOOKED and tenant can vacate anytime
+    console.log('[INFO] Showing vacate box for active booking:', bookingData);
+    
     const html = `
         <div class="card mt-4 border-warning">
             <div class="card-header bg-warning text-dark">
@@ -68,9 +72,14 @@ function showVacateButton(bookingData) {
                 <h6>${bookingData.apartmentTitle || 'Apartment'}</h6>
                 <p><strong>Monthly Rent:</strong> ৳${bookingData.monthlyRent}</p>
                 <p><strong>Transaction ID:</strong> ${bookingData.transactionId}</p>
-                <button class="btn btn-danger" onclick="showVacateModal()">
-                    <i class="bi bi-box-arrow-right"></i> Vacate Apartment
-                </button>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-danger" onclick="showVacateModal()">
+                        <i class="bi bi-box-arrow-right"></i> Vacate Apartment
+                    </button>
+                </div>
+                <small class="text-muted mt-2 d-block">
+                    <i class="bi bi-info-circle"></i> Optional: Leave a review when vacating
+                </small>
             </div>
         </div>
     `;
@@ -89,10 +98,10 @@ window.showVacateModal = function() {
     
     const html = `
         <div class="modal fade" id="vacateModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog">
+            <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <div class="modal-header bg-danger text-white">
-                        <h5 class="modal-title">Vacate Apartment</h5>
+                        <h5 class="modal-title">Vacate Apartment & Leave Review</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
@@ -100,18 +109,61 @@ window.showVacateModal = function() {
                         <p><strong>Monthly Rent:</strong> ৳${userBookingDetails.monthlyRent}</p>
                         <hr>
                         <form id="vacateForm">
+                            <!-- Vacate Date -->
                             <div class="mb-3">
-                                <label for="vacateDate" class="form-label">Vacate Date</label>
+                                <label for="vacateDate" class="form-label">Vacate Date <span class="text-danger">*</span></label>
                                 <input type="date" class="form-control" id="vacateDate" 
                                        min="${today}" required>
-                                <small class="form-text text-muted">
-                                    Select the date you plan to leave the apartment
-                                </small>
                             </div>
-                            <div class="alert alert-warning">
-                                <strong>Note:</strong> Once you vacate, the apartment will be available for others to book.
+                            
+                            <hr>
+                            <h6 class="text-primary">Leave Your Review (Optional)</h6>
+                            
+                            <!-- Rating -->
+                            <div class="mb-3">
+                                <label for="rating" class="form-label">Rating</label>
+                                <select class="form-select" id="rating">
+                                    <option value="">Skip review...</option>
+                                    <option value="5">⭐⭐⭐⭐⭐ (5 - Excellent)</option>
+                                    <option value="4">⭐⭐⭐⭐ (4 - Very Good)</option>
+                                    <option value="3">⭐⭐⭐ (3 - Good)</option>
+                                    <option value="2">⭐⭐ (2 - Fair)</option>
+                                    <option value="1">⭐ (1 - Poor)</option>
+                                </select>
                             </div>
-                            <button type="submit" class="btn btn-danger w-100">Confirm Vacate</button>
+                            
+                            <!-- Good Sides -->
+                            <div class="mb-3">
+                                <label for="goodSides" class="form-label">What did you like?</label>
+                                <textarea class="form-control" id="goodSides" rows="2" 
+                                          placeholder="E.g., Great location, clean, friendly landlord..."></textarea>
+                            </div>
+                            
+                            <!-- Bad Sides -->
+                            <div class="mb-3">
+                                <label for="badSides" class="form-label">What needs improvement?</label>
+                                <textarea class="form-control" id="badSides" rows="2" 
+                                          placeholder="E.g., Noisy, plumbing issues..."></textarea>
+                            </div>
+                            
+                            <!-- Remarks -->
+                            <div class="mb-3">
+                                <label for="remarks" class="form-label">Additional Comments</label>
+                                <textarea class="form-control" id="remarks" rows="2" 
+                                          placeholder="Any other thoughts..."></textarea>
+                            </div>
+                            
+                            <div class="alert alert-info">
+                                <strong>Note:</strong> Leaving a review is optional but helps future tenants make informed decisions.
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="bi bi-box-arrow-right"></i> Vacate & Submit Review
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="skipReviewAndVacate()">
+                                    <i class="bi bi-skip-forward"></i> Skip Review & Just Vacate
+                                </button>
+                            </div>
                         </form>
                         <div id="vacateMessage" class="mt-3"></div>
                     </div>
@@ -124,12 +176,121 @@ window.showVacateModal = function() {
     const modal = new bootstrap.Modal(document.getElementById('vacateModal'));
     modal.show();
     
-    // Handle form submission
-    document.getElementById('vacateForm').addEventListener('submit', function(e) {
+    // Handle form submission (vacate with review)
+    document.getElementById('vacateForm').addEventListener('submit', async function(e) {
         e.preventDefault();
-        const vacateDate = document.getElementById('vacateDate').value;
         
-        fetch('/api/vacate', {
+        // Get all form values
+        const vacateDate = document.getElementById('vacateDate').value;
+        const rating = document.getElementById('rating').value;
+        const goodSides = document.getElementById('goodSides').value;
+        const badSides = document.getElementById('badSides').value;
+        const remarks = document.getElementById('remarks').value;
+        
+        // Check if user wants to leave a review
+        const hasReview = rating && goodSides.trim();
+        
+        // Disable submit button
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
+        
+        try {
+            // Step 1: Submit vacate request
+            const vacateResponse = await fetch('/api/vacate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tenantId: user.userId,
+                    apartmentId: userBookingDetails.apartmentId,
+                    vacateDate: vacateDate
+                })
+            });
+            
+            const vacateData = await vacateResponse.json();
+            
+            if (!vacateData.success) {
+                throw new Error(vacateData.message || 'Failed to vacate apartment');
+            }
+            
+            let successMessage = `<strong>Success!</strong> Your apartment has been vacated.<br><small>Vacate Date: ${vacateData.vacateDate}</small>`;
+            
+            // Step 2: Submit review (if provided)
+            if (hasReview) {
+                const reviewResponse = await fetch('/api/reviews', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: user.userId,
+                        apartmentId: userBookingDetails.apartmentId,
+                        rating: parseInt(rating),
+                        goodSides: goodSides.trim(),
+                        badSides: badSides.trim() || 'N/A',
+                        remarks: remarks.trim() || 'N/A',
+                        tenantName: user.name
+                    })
+                });
+                
+                const reviewData = await reviewResponse.json();
+                
+                if (reviewData.success) {
+                    successMessage += `<br><small>Rating: ${'⭐'.repeat(parseInt(rating))}</small><br><small>✓ Review submitted successfully</small>`;
+                }
+            }
+            
+            // Success! Show message
+            document.getElementById('vacateMessage').innerHTML = 
+                `<div class="alert alert-success">
+                    ${successMessage}
+                    <br><br>
+                    <button class="btn btn-primary" onclick="window.location.reload()">
+                        <i class="bi bi-check-circle"></i> Close & Refresh
+                    </button>
+                </div>`;
+            
+            // Clear booking status
+            userHasBooking = false;
+            userBookingDetails = null;
+            
+            // Reload page after 2 seconds
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('vacateMessage').innerHTML = 
+                `<div class="alert alert-danger">
+                    <strong>Error:</strong> ${error.message || 'Failed to process request'}
+                </div>`;
+            
+            // Re-enable submit button
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Submit Vacate & Review';
+        }
+    });
+}
+
+// Skip review and just vacate
+window.skipReviewAndVacate = async function() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    const vacateDate = document.getElementById('vacateDate').value;
+    
+    if (!vacateDate) {
+        alert('Please select a vacate date');
+        return;
+    }
+    
+    if (!confirm('Are you sure you want to vacate without leaving a review?')) {
+        return;
+    }
+    
+    // Disable buttons
+    const buttons = document.querySelectorAll('#vacateForm button');
+    buttons.forEach(btn => btn.disabled = true);
+    
+    try {
+        const vacateResponse = await fetch('/api/vacate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -137,40 +298,43 @@ window.showVacateModal = function() {
                 apartmentId: userBookingDetails.apartmentId,
                 vacateDate: vacateDate
             })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                document.getElementById('vacateMessage').innerHTML = 
-                    `<div class="alert alert-success">
-                        <strong>Success!</strong> ${data.message}
-                        <br><small>Vacate Date: ${data.vacateDate}</small>
-                        <br><br>
-                        <button class="btn btn-primary" onclick="showReviewModal(${userBookingDetails.apartmentId})">
-                            <i class="bi bi-star-fill"></i> Leave a Review
-                        </button>
-                        <button class="btn btn-secondary" onclick="window.location.reload()">Skip</button>
-                    </div>`;
-                
-                // Clear booking status
-                userHasBooking = false;
-                const apartmentId = userBookingDetails.apartmentId;
-                userBookingDetails = null;
-            } else {
-                document.getElementById('vacateMessage').innerHTML = 
-                    `<div class="alert alert-danger">
-                        <strong>Error:</strong> ${data.error || 'Failed to vacate apartment'}
-                    </div>`;
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            document.getElementById('vacateMessage').innerHTML = 
-                `<div class="alert alert-danger">
-                    <strong>Error:</strong> Failed to process vacate request
-                </div>`;
         });
-    });
+        
+        const vacateData = await vacateResponse.json();
+        
+        if (!vacateData.success) {
+            throw new Error(vacateData.message || 'Failed to vacate apartment');
+        }
+        
+        document.getElementById('vacateMessage').innerHTML = 
+            `<div class="alert alert-success">
+                <strong>Success!</strong> Your apartment has been vacated.
+                <br><small>Vacate Date: ${vacateData.vacateDate}</small>
+                <br><br>
+                <button class="btn btn-primary" onclick="window.location.reload()">
+                    <i class="bi bi-check-circle"></i> Close & Refresh
+                </button>
+            </div>`;
+        
+        // Clear booking status
+        userHasBooking = false;
+        userBookingDetails = null;
+        
+        // Reload page after 2 seconds
+        setTimeout(() => {
+            window.location.reload();
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('vacateMessage').innerHTML = 
+            `<div class="alert alert-danger">
+                <strong>Error:</strong> ${error.message || 'Failed to vacate apartment'}
+            </div>`;
+        
+        // Re-enable buttons
+        buttons.forEach(btn => btn.disabled = false);
+    }
 }
 
 // Check tenant's roommate group status

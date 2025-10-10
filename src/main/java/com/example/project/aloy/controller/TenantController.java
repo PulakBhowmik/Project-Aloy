@@ -26,36 +26,38 @@ public class TenantController {
     /**
      * Check if a tenant has an active booking
      * Returns booking details if found
+     * 
+     * Uses apartment.booked status as the source of truth
      */
     @GetMapping("/{userId}/booking-status")
     public ResponseEntity<?> getBookingStatus(@PathVariable Long userId) {
         try {
-            // Find all payments for this tenant
-            List<Payment> payments = paymentRepository.findByTenantId(userId);
+            // Get all apartments
+            List<Apartment> allApartments = apartmentRepository.findAll();
             
-            // Look for a COMPLETED payment (active booking) that hasn't been vacated
-            for (Payment payment : payments) {
-                if ("COMPLETED".equalsIgnoreCase(payment.getStatus()) && 
-                    payment.getApartmentId() != null && 
-                    payment.getVacateDate() == null) {  // Only non-vacated bookings
+            // Find any apartment that is BOOKED by this tenant
+            for (Apartment apartment : allApartments) {
+                if (apartment.isBooked()) {
+                    // Check if this tenant has a COMPLETED payment for this apartment
+                    List<Payment> payments = paymentRepository.findByTenantId(userId);
                     
-                    // Found active booking - fetch apartment details
-                    Apartment apartment = apartmentRepository.findById(payment.getApartmentId()).orElse(null);
-                    
-                    if (apartment == null) {
-                        System.out.println("[WARN] Apartment with ID " + payment.getApartmentId() + " not found for payment " + payment.getPaymentId());
-                        continue; // Skip this payment and check next one
+                    for (Payment payment : payments) {
+                        if ("COMPLETED".equalsIgnoreCase(payment.getStatus()) && 
+                            payment.getApartmentId() != null &&
+                            payment.getApartmentId().equals(apartment.getApartmentId())) {
+                            
+                            // This tenant has the booked apartment
+                            Map<String, Object> response = new HashMap<>();
+                            response.put("hasBooking", true);
+                            response.put("apartmentId", apartment.getApartmentId());
+                            response.put("apartmentTitle", apartment.getTitle());
+                            response.put("monthlyRent", apartment.getMonthlyRate());
+                            response.put("transactionId", payment.getTransactionId());
+                            response.put("paymentDate", payment.getCreatedAt());
+                            
+                            return ResponseEntity.ok(response);
+                        }
                     }
-                    
-                    Map<String, Object> response = new HashMap<>();
-                    response.put("hasBooking", true);
-                    response.put("apartmentId", payment.getApartmentId());
-                    response.put("apartmentTitle", apartment.getTitle());
-                    response.put("monthlyRent", apartment.getMonthlyRate());
-                    response.put("transactionId", payment.getTransactionId());
-                    response.put("paymentDate", payment.getCreatedAt());
-                    
-                    return ResponseEntity.ok(response);
                 }
             }
             

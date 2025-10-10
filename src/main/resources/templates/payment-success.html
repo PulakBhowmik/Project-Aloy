@@ -26,8 +26,9 @@
             document.body.removeChild(downloadLink);
             
             // After 2 seconds, redirect to home page to show updated apartment status
+            // Add cache busting to force fresh data load
             setTimeout(function() {
-                window.location.href = '/';
+                window.location.href = '/?refresh=' + Date.now();
             }, 2000);
         } else {
             alert('Transaction ID not found.');

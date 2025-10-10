@@ -34,8 +34,11 @@ public class PaymentService {
         // Update payment status to COMPLETED if not already
         if (!"COMPLETED".equals(paymentRecord.getStatus())) {
             paymentRecord.setStatus("COMPLETED");
+            // CRITICAL: Clear vacate_date when completing a new payment
+            // This ensures the constraint logic (vacate_date == null) works correctly
+            paymentRecord.setVacateDate(null);
             paymentRepository.save(paymentRecord);
-            System.out.println("[DEBUG Service] Payment status updated to COMPLETED");
+            System.out.println("[DEBUG Service] Payment status updated to COMPLETED, vacate_date cleared");
         }
 
         // Mark apartment as booked

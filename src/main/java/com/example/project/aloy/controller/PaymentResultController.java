@@ -157,6 +157,8 @@ public class PaymentResultController {
         } else {
             System.out.println("[DEBUG] Payment record FOUND for transactionId: " + tranId + ". Updating status to COMPLETED.");
             paymentRecord.setStatus("COMPLETED");
+            // CRITICAL: Clear vacate_date when completing a payment
+            paymentRecord.setVacateDate(null);
         }
         // Link apartment and tenant if provided
         String aptIdStr = allParams.getOrDefault("value_a", "");

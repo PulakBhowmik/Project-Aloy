@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.example.project.aloy.repository.PaymentRepository;
 import com.example.project.aloy.repository.ApartmentRepository;
 import com.example.project.aloy.model.Payment;
+import com.example.project.aloy.model.Apartment;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import org.springframework.web.client.RestTemplate;
@@ -81,16 +82,17 @@ public class SSLCommerzPaymentController {
                     }
                 }
                 
-                // Second pass: Check for active bookings
+                // Second pass: Check for active bookings using apartment.booked status
                 for (Payment p : tenantPayments) {
-                    System.out.println("[DEBUG CONSTRAINT] Payment ID=" + p.getPaymentId() + ", Status=" + p.getStatus() + ", ApartmentId=" + p.getApartmentId() + ", TenantId=" + p.getTenantId() + ", VacateDate=" + p.getVacateDate());
+                    System.out.println("[DEBUG CONSTRAINT] Payment ID=" + p.getPaymentId() + ", Status=" + p.getStatus() + ", ApartmentId=" + p.getApartmentId() + ", TenantId=" + p.getTenantId());
                     
-                    // Block if COMPLETED payment exists AND hasn't been vacated
-                    if ("COMPLETED".equalsIgnoreCase(p.getStatus()) && 
-                        p.getApartmentId() != null && 
-                        p.getVacateDate() == null) {
-                        System.out.println("[WARNING CONSTRAINT] Tenant " + tenantId + " already has a COMPLETED booking for apartment " + p.getApartmentId());
-                        return ResponseEntity.status(409).body(Collections.singletonMap("error", "You already have an active apartment booking. One tenant can only book one apartment at a time."));
+                    // Check if this payment has a COMPLETED status with a BOOKED apartment
+                    if ("COMPLETED".equalsIgnoreCase(p.getStatus()) && p.getApartmentId() != null) {
+                        Apartment apt = apartmentRepository.findById(p.getApartmentId()).orElse(null);
+                        if (apt != null && apt.isBooked()) {
+                            System.out.println("[WARNING CONSTRAINT] Tenant " + tenantId + " already has an active booking for apartment " + p.getApartmentId() + " (apartment.booked=true)");
+                            return ResponseEntity.status(409).body(Collections.singletonMap("error", "You already have an active apartment booking! You can only book one apartment at a time. Please vacate your current apartment first."));
+                        }
                     }
                     
                     // Block if there's a recent PENDING payment (< 30 minutes) to prevent double-booking during active session
@@ -112,7 +114,7 @@ public class SSLCommerzPaymentController {
                         } catch (Exception ignored) {}
                     }
                 }
-                System.out.println("[DEBUG CONSTRAINT] Tenant " + tenantId + " has no active bookings. Proceeding with payment initiation.");
+                System.out.println("[DEBUG CONSTRAINT] Tenant " + tenantId + " has no active bookings (no COMPLETED payments with booked apartments). Proceeding with payment initiation.");
             } catch (NumberFormatException ignored) {}
         }
         
